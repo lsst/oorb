@@ -8,7 +8,6 @@ _ensure_exists()
 prep()
 {
 	# check for system prerequisites
-	_ensure_exists wget
 	_ensure_exists gfortran
 
 	default_prep
