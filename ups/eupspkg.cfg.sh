@@ -22,6 +22,9 @@ build()
 {
 	PKGROOT="$PWD"
 
+	# Passing MAKEFLAGS can lead to odd errors in the gfortran compiler
+	( unset MAKEFLAGS )
+
 	# built & test OpenOrb
 	( cd main && make oorb )
 
