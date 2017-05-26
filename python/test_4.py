@@ -62,7 +62,7 @@ if __name__ == "__main__":
         os.unlink('test_orbits_new.des')
     except OSError:
         pass
-    command = "oorb --task=propagation --orb-in=test_orbits.des" \
+    command = "oorb --task=propagation --orb-in=test_orbits.des " \
         "--orb-out=test_orbits_new.des --epoch-mjd-tt=%f" % newepoch
     print(command)
     subprocess.call(command, shell=True)
@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
     # For pyoorb, we need to tag times with timescales;
     # 1= MJD_UTC, 2=UT1, 3=TT, 4=TAI
-    epochTime = np.array(zip([newepoch], repeat(3, len([newepoch]))), dtype='double')
+    epochTime = np.array(list(zip([newepoch], repeat(3, len([newepoch])))), dtype='double')
     dt, t = dtime(t)
     print("Ready for orbit propagation .. %f s" % (dt))
 
