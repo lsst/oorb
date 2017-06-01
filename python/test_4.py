@@ -63,21 +63,15 @@ if __name__ == "__main__":
     except OSError:
         pass
     command = "oorb --task=propagation --orb-in=test_orbits.des" \
-        "--orb-out=test_orbits_new.des --epoch-mjd-tt=%f" % newepoch
+        " --orb-out=test_orbits_new.des --epoch-mjd-tt=%f" % newepoch
     print(command)
     subprocess.call(command, shell=True)
     dt, t = dtime(t)
     print("Propagating orbits by command line took %f s " % (dt))
 
-    # Read the command line version back, to look for differences.
-    data = pd.read_table('test_orbits_new.des', sep="\s*", engine='python')
-    dt, t = dtime(t)
-    print("Reading data back from file %f s" % (dt))
-    print("Read %d orbits" % (len(data['q'])))
-
     # Read the orbits from disk.
     dt, t = dtime(t)
-    orbits = pd.read_table('test_orbits.des', sep='\s*', engine='python')
+    orbits = pd.read_table('test_orbits.des', delim_whitespace=True)
     newcols = orbits.columns.values
     newcols[0] = 'objid'
     orbits.columns = newcols
@@ -92,7 +86,7 @@ if __name__ == "__main__":
 
     # For pyoorb, we need to tag times with timescales;
     # 1= MJD_UTC, 2=UT1, 3=TT, 4=TAI
-    epochTime = np.array(zip([newepoch], repeat(3, len([newepoch]))), dtype='double')
+    epochTime = np.array(list(zip([newepoch], repeat(3, len([newepoch])))), dtype='double')
     dt, t = dtime(t)
     print("Ready for orbit propagation .. %f s" % (dt))
 
@@ -102,3 +96,10 @@ if __name__ == "__main__":
     print("Calculating new orbits by python required %f s" % (dt))
     orbits = unpack_oorbArray(newOorbElems)
     print(orbits)
+
+    # Read the command line version back, to look for differences.
+    data = pd.read_table('test_orbits_new.des', delim_whitespace=True)
+    dt, t = dtime(t)
+    print("Reading data back from file %f s" % (dt))
+    print("Read %d orbits" % (len(data['q'])))
+
