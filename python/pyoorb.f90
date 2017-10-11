@@ -308,6 +308,7 @@ CONTAINS
        out_orbits(i,8) = in_orbits(i,8)
        out_orbits(i,9) = in_epoch(1)
        out_orbits(i,10) = in_epoch(2)
+       out_orbits(i,11:) = in_orbits(i,11:)
        CALL NULLIFY(orb)
        CALL NULLIFY(t1)
     END DO
@@ -420,6 +421,7 @@ CONTAINS
        out_orbits(i,8) = in_orbits(i,8)
        out_orbits(i,9) = in_epoch(1)
        out_orbits(i,10) = in_epoch(2)
+       out_orbits(i,11:) = in_orbits(i,11:)
        ! print *,out_orbits
        CALL NULLIFY(orb_arr(1))
        CALL NULLIFY(t1)
