@@ -1,6 +1,6 @@
 !====================================================================!
 !                                                                    !
-! Copyright 2002-2015,2016                                           !
+! Copyright 2002-2017,2018                                           !
 ! Mikael Granvik, Jenni Virtanen, Karri Muinonen, Teemu Laakso,      !
 ! Dagmara Oszkiewicz                                                 !
 !                                                                    !
@@ -27,7 +27,7 @@
 !! called from main programs.
 !!
 !! @author  MG, JV
-!! @version 2016-04-05
+!! @version 2018-01-10
 !!
 MODULE io
 
@@ -545,10 +545,10 @@ CONTAINS
        observation_format_out, orbit_format_out, &
        plot_results, &
        plot_open, &
-       dyn_model, perturbers, integrator, integration_step, relativity, &
+       dyn_model, perturbers, asteroid_perturbers, integrator, integration_step, relativity, &
        dyn_model_init, integrator_init, integration_step_init, simint, &
        accwin_multiplier, &
-       dchi2_rejection, dchi2_max, regularized_pdf, chi2_min, & 
+       dchi2_rejection, dchi2_max, regularized_pdf, chi2_min, &
        outlier_rejection, outlier_multiplier, &
        apriori_a_min, apriori_a_max, apriori_periapsis_min, &
        apriori_periapsis_max, apriori_apoapsis_min, &
@@ -673,6 +673,7 @@ CONTAINS
     LOGICAL, DIMENSION(4), INTENT(inout), OPTIONAL :: &
          sor_iterate_bounds
     LOGICAL, INTENT(inout), OPTIONAL :: &
+         asteroid_perturbers,&
          plot_results, &
          plot_open, &
          multiple_ids, &
@@ -865,7 +866,12 @@ CONTAINS
           END IF
        CASE ("outlier_rejection")
           IF (PRESENT(outlier_rejection)) THEN
-             outlier_rejection = .TRUE.
+             READ(par_val, *, iostat=err) outlier_rejection
+             IF (err /= 0) THEN
+                error = .TRUE.
+                CALL errorMessage("io / readConfigurationFile", &
+                     "Could not read parameter value (40).", 1)
+             END IF
           END IF
        CASE ("outlier.multiplier")
           IF (PRESENT(outlier_multiplier)) THEN
@@ -1135,6 +1141,22 @@ CONTAINS
                 END SELECT
              END IF
           END IF
+       CASE ("perturber.asteroids")
+         IF (PRESENT(asteroid_perturbers)) THEN
+            IF (.NOT.error) THEN
+               SELECT CASE (ADJUSTL(par_val))
+               CASE ("t", "T")
+                  asteroid_perturbers = .TRUE.
+               CASE ("f", "F")
+                  asteroid_perturbers = .FALSE.
+               CASE default
+                  error = .TRUE.
+                  CALL errorMessage("io / readConfigurationFile", &
+                       "Cannot understand logical value: " // &
+                       TRIM(ADJUSTL(par_val)) // ".", 1)
+               END SELECT
+            END IF
+         END IF
        CASE ("integrator")
           IF (PRESENT(integrator)) THEN
              integrator = TRIM(par_val)
@@ -2038,14 +2060,14 @@ CONTAINS
        IF (line(132:132) == "-") THEN
           CALL toInt(line(128:131), y1, error)
           CALL toInt(line(133:136), y2, error)
-          arc_arr(norb) = REAL(y2-y1)*day_year
-!!$          arc_arr(norb) = y1
+          arc_arr(norb) = REAL(y2-y1)*day_year ! observed arc in days with a resolution of 1 year
+!!$          arc_arr(norb) = y1 ! discovery year
        ELSE
-          CALL toReal(line(128:131), arc_arr(norb), error)          
+          CALL toReal(line(128:131), arc_arr(norb), error) ! observed arc in days
 !!$          line = ""
 !!$          line = id_arr(norb)
 !!$          CALL decodeMPCDesignation(line)
-!!$          CALL toReal(line(1:4),arc_arr(norb),error)
+!!$          CALL toReal(line(1:4),arc_arr(norb),error) ! discovery year
           IF (error) THEN
              error = .FALSE.
              arc_arr(norb) = -1
@@ -2645,8 +2667,10 @@ CONTAINS
     ELSE IF (element_type_out == "keplerian") THEN
        frmt = "KEP" // TRIM(frmt)
        elements(3:6) = elements(3:6)/rad_deg
-    ELSE IF (element_type_out == "cartesian") THEN
+    ELSE IF (element_type_out == "cartesian" .AND. frame_ == "ecliptic") THEN
        frmt = "CAR" // TRIM(frmt)
+    ELSE IF (element_type_out == "cartesian" .AND. frame_ == "equatorial") THEN
+       frmt = "CAREQ" // TRIM(frmt)
     ELSE
        error = .TRUE.
        CALL errorMessage("io / writeDESOrbitFile", &
@@ -2904,7 +2928,7 @@ CONTAINS
     ! WRITE REDUCED CHI2:
     CALL getParameters(storb, ls_element_mask=ls_element_mask)
     inform_mat_obs_bd => getBlockDiagInformationMatrix(obss)
-    rchi2 = chi_square(residuals, inform_mat_obs_bd, obs_masks, errstr) - &
+    rchi2 = chi_square(residuals, inform_mat_obs_bd, obs_masks, errstr) / &
          COUNT(obs_masks)
     IF (LEN_TRIM(errstr) /= 0) THEN
        error = .TRUE.
@@ -3113,7 +3137,7 @@ CONTAINS
           header(4)(indx:indx+22) = ">--------0050--------<"
           indx = indx + 22
        ELSE IF (element_type_out == "poincare") THEN
-          !! Output Poincaré elements calculated from Delaunay's
+          !! Output PoincarÃ© elements calculated from Delaunay's
           !! elements. The mass of the target body is assumed to be negligible
           !! compared to the mass of the Sun.
           !  (&radic = square root)

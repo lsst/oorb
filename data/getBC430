@@ -1,8 +1,10 @@
+#!/bin/bash
+#
 #====================================================================#
 #                                                                    #
-# Copyright 2002,2003,2004,2005,2006,2007,2008,2009                  #
+# Copyright 2002-2017                                                #
 # Mikael Granvik, Jenni Virtanen, Karri Muinonen, Teemu Laakso,      #
-# Dagmara Oszkiewicz                                                 #
+# Dagmara Oszkiewicz, Lauri Siltala                                  #
 #                                                                    #
 # This file is part of OpenOrb.                                      #
 #                                                                    #
@@ -21,42 +23,14 @@
 #                                                                    #
 #====================================================================#
 #
-# This is a makefile for the classes, modules, executables,
-# and documentation in the OpenOrb-project.
+# This is a small utility script that downloads the BC430 asteroid 
+# ephemerides.
+# 
 #
-# Author:  MG
-# Version: 2009-11-09
+# Author: LS
+# Date:   2018-02-05
 
-include make.config
-
-PREFIX ?= /opt/oorb
-
-# Write back-up:
-backup:
-	$(SHELL) -c "if test -d ../backup_$(PROJNAME); then true; else mkdir ../backup_$(PROJNAME); fi"
-	cp -a * ../backup_$(PROJNAME)
-
-# Make tar-ball:
-tar: all_clean
-	cd .. ; tar cvf $(PROJNAME)_v$(VERSION).tar $(PROJNAME) ; gzip $(PROJNAME)_v$(VERSION).tar
-
-all_clean: clean
-	cd $(DOCPATH)    ; $(MAKE) clean
-	cd $(CLASSPATH)  ; $(MAKE) clean
-	cd $(MODULEPATH) ; $(MAKE) clean
-	cd $(MAINPATH)   ; $(MAKE) clean
-	cd $(PYTHONPATH) ; $(MAKE) clean
-	cd $(LIBPATH)    ; $(MAKE) clean
-
-install:
-	mkdir -p $(PREFIX)/bin $(PREFIX)/etc $(PREFIX)/lib $(PREFIX)/data $(PREFIX)/python
-	cp -a main/oorb $(PREFIX)/bin/
-	cp -a main/oorb.conf $(PREFIX)/etc/
-	cp -a lib/* $(PREFIX)/lib/
-	cp -a data/* $(PREFIX)/data/
-	cp -a python/* $(PREFIX)/python/
-
-# Remove library and modules:
-clean:
-	rm -f *~ *.mod *.o
+curl -L -O -\# -C - -f http://staff.not.iac.es/~siltala/asteroid_indices.txt
+curl -L -O -\# -C - -f http://staff.not.iac.es/~siltala/asteroid_masses.txt
+curl -L -O -\# -C - -f http://staff.not.iac.es/~siltala/asteroid_ephemeris.txt
 
