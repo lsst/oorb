@@ -454,7 +454,7 @@ CONTAINS
     REAL(8), DIMENSION(in_ndate,2), INTENT(in)          :: in_date_ephems ! (1:ndate,1:2)
     ! Output ephemeris
     ! out_ephems = ((dist, ra, dec, mag, mjd, timescale, dra/dt, ddec/dt, phase, solar_elongation), )
-    REAL(8), DIMENSION(in_norb,in_ndate,10), INTENT(out) :: out_ephems ! (1:norb,1:ndate,1:8)
+    REAL(8), DIMENSION(in_norb,in_ndate,14), INTENT(out) :: out_ephems ! (1:norb,1:ndate,1:8)
     ! Output error code
     INTEGER, INTENT(out)                                :: error_code
 
@@ -465,12 +465,14 @@ CONTAINS
     TYPE (CartesianCoordinates) :: ccoord
     TYPE (CartesianCoordinates) :: obsy_ccoord
     TYPE (SphericalCoordinates), DIMENSION(:,:), POINTER :: ephemerides
+    TYPE (SphericalCoordinates) :: scoord
     TYPE (Time) :: t
     REAL(8), DIMENSION(:,:), POINTER :: planeph
     CHARACTER(len=INTEGRATOR_LEN) :: integrator
     CHARACTER(len=6) :: dyn_model
     REAL(8), DIMENSION(6) :: coordinates, &
-         elements
+         elements, &
+         comp_coord
     REAL(8), DIMENSION(3) :: obsy_obj, &
          obsy_pos, &
          geoc_obsy, &
@@ -486,7 +488,14 @@ CONTAINS
          observer_r2, &
          phase, &
          solar_elongation, &
-         vmag
+         vmag, &
+         hlon, &
+         hlat, &
+         ta_s, &
+         ta_c, &
+         fak, &
+         ecc_anom, &
+         true_anom
     INTEGER :: i, &
          j
     LOGICAL, DIMENSION(10) :: perturbers
@@ -619,8 +628,35 @@ CONTAINS
                SQRT(ephemeris_r2))
           phase = ACOS(cos_phase)
 
+          ! heliocentric ecliptic lon and lat
+          ccoord = getCCoord(orb_lt_corr_arr(1,j), "ecliptic")
+          scoord = getSCoord(ccoord)
+          comp_coord = getCoordinates(scoord)
+          IF (error) THEN
+             CALL errorMessage('oorb / ephemeris', &
+                  'TRACE BACK (45)',1)
+             STOP
+          END IF
+          hlon = comp_coord(2)
+          hlat = comp_coord(3)
+          CALL NULLIFY(ccoord)
+          CALL NULLIFY(scoord)
 
+          ! true anomaly
+          elements = getElements(orb_lt_corr_arr(1,j), "cometary")
+          IF (elements(2) < 1.0_bp) THEN
+             ! Compute eccentric and true anomalies if orbit is elliptic:
+             CALL solveKeplerEquation(orb_lt_corr_arr(1,j), orb_lt_corr_arr(1,j)%t, ecc_anom)
+             ta_s = SIN(ecc_anom)
+             ta_c = COS(ecc_anom)
+             fak = SQRT(1 - elements(2) * elements(2))
+             true_anom = MODULO(ATAN2(fak * ta_s, ta_c - elements(2)),two_pi)
+          ELSE
+             ecc_anom = -99.0_bp
+             true_anom = -99.0_bp
+          END IF
 
+          
           vmag = getApparentHGMagnitude(H=in_orbits(i,11), &
                G=in_orbits(i,12), r=SQRT(heliocentric_r2), &
                Delta=coordinates(1), phase_angle=phase)
@@ -664,17 +700,22 @@ CONTAINS
 
 
           ! Write the output ephem array.
-          out_ephems(i,j,1) = coordinates(1)                             ! distance
-          out_ephems(i,j,2) = coordinates(2)/rad_deg                     ! ra
-          out_ephems(i,j,3) = coordinates(3)/rad_deg                     ! dec
+          out_ephems(i,j,1) = coordinates(1)                             ! geocentic dist.(au)
+          out_ephems(i,j,2) = coordinates(2)/rad_deg                     ! ra (deg)
+          out_ephems(i,j,3) = coordinates(3)/rad_deg                     ! dec (deg)
           out_ephems(i,j,4) = vmag                                       ! mag
           out_ephems(i,j,5) = mjd                                        ! ephem mjd
           out_ephems(i,j,6) = NINT(in_date_ephems(j,2))                  ! ephem mjd timescale
-          out_ephems(i,j,7) = coordinates(5)*COS(coordinates(3))/rad_deg ! dra/dt  sky-motion
-          out_ephems(i,j,8) = coordinates(6)/rad_deg                     ! ddec/dt sky-motion
-          out_ephems(i,j,9) = phase/rad_deg                              ! phase angle
+          out_ephems(i,j,7) = coordinates(5)*COS(coordinates(3))/rad_deg ! dra/dt  sky-motion (deg/s)
+          out_ephems(i,j,8) = coordinates(6)/rad_deg                     ! ddec/dt sky-motion (deg/s)
+          out_ephems(i,j,9) = phase/rad_deg                              ! phase angle (deg)
           out_ephems(i,j,10) = solar_elongation/rad_deg                  ! solar elongation angle (deg)
-
+          out_ephems(i,j,11) = SQRT(heliocentric_r2)                     ! heliocentric dist. (au)
+          out_ephems(i,j,12) = hlon/rad_deg                              ! heliocentric longitude (deg)
+          out_ephems(i,j,13) = hlat/rad_deg                              ! heliocentric latitude (deg)
+          out_ephems(i,j,14) = true_anom/rad_deg                         ! true anomaly (deg)
+          ! orbit plane angle?
+          
           CALL NULLIFY(ephemerides(1,j))
           CALL NULLIFY(orb_lt_corr_arr(1,j))
 
