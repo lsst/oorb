@@ -23,21 +23,27 @@
 
 OpenOrb Python wrappers.
 
+Installation
+------------
 
-To build, cd into this directory and then
-    shell> make clean
-    shell> make
-    shell> python setup.py install
+1. Follow oorb installation guide
 
-Test by running
-    shell> python api.py
+2. To build, cd into this directory and then
+       shell> make clean
+       shell> make
+       shell> make pyoorb
+       shell> python setup.py install
+
+3. Test by running
+       shell> python api.py
+       shell> python test.py
 
 If you get an error from python saying that liboorb cannot be found, copy
 liboorb.so (or liboorb.dylib if you are on a Mac) somewhere in your
 LD_LIBRARY_PATH (or DYLD_LIBRARY_PATH if you are on a Mac).
 
+You might have to add the OORB_PATH/python directory to your PYTHONPATH variable (happened under Ubuntu 16.04) to run it from anywhere.
 
-Tested on a Mac OS X system running OSX 10.5.x and gfortran 4.4.x
+Tested on a Mac OS X system running OSX 10.5.x and gfortran 4.4.x, Ubuntu 16.04 and gfortran 5.0.4
 
-These wrappers are not in their final version and so they should not be used in
-production software. You have been warned!
+These wrappers are not in their final version and so they should not be used in production software. You have been warned!
