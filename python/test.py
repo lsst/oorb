@@ -1,4 +1,4 @@
-# ================================================================== #
+#====================================================================#
 #                                                                    #
 # Copyright 2002,2003,2004,2005,2006,2007,2008,2009                  #
 # Mikael Granvik, Jenni Virtanen, Karri Muinonen, Teemu Laakso,      #
@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License  #
 # along with OpenOrb. If not, see <http://www.gnu.org/licenses/>.    #
 #                                                                    #
-# ================================================================== #
+#====================================================================#
 #
 # Script for testing pyoorb library using Python. The results should
 # be identical to the results by test.f90 if everything is okay.
@@ -27,20 +27,22 @@
 # @author  MG, JM
 # @version 2009-12-01
 #
+# updated 2018-09-06 Michael Mommert, sbpy.org
 
-from __future__ import print_function
-from __future__ import absolute_import
+#!/usr/bin/env python
 
 import pyoorb
 import numpy
+import os
 
 if __name__ == "__main__":
     print("starting...")
     print("calling oorb_init():")
-    pyoorb.pyoorb.oorb_init(error_verbosity=5, info_verbosity=5)
+    ephfile = os.path.join(os.getenv('OORB_DATA'), 'de430.dat')
+    pyoorb.pyoorb.oorb_init(ephfile)
     # orb is id, 6 elements, epoch_mjd, H, G, element type index
     # keplerian appears to be element type index 3
-    # orbits = numpy.array([0.,1.,2.,3.,4.,5.,6.,5373.,1.,1.,3.])
+    #orbits = numpy.array([0.,1.,2.,3.,4.,5.,6.,5373.,1.,1.,3.])
     # using the first item in PS-SSM, 1/100th density, s1.01 file.
     orbits = numpy.zeros([3, 12], dtype=numpy.double, order='F')
     orbits[0][0] = 1.0
@@ -67,7 +69,8 @@ if __name__ == "__main__":
     print(orbits[1])
     print(orbits[2])
 
-    covariances = numpy.zeros([3, 6, 6], order='F')  # zero covariance is okay for now...
+    # zero covariance is okay for now...
+    covariances = numpy.zeros([3, 6, 6], order='F')
 
     covariances[0][0][:] = [1.59357530E-06, 4.54646999E-07, 5.59222797E-06,
                             -3.87304158E-06, -3.54135866E-07, -4.31574921E-05]
@@ -97,6 +100,32 @@ if __name__ == "__main__":
     ephem_dates[0][:] = [55148.0, 1.0]
     ephem_dates[1][:] = [55150.0, 1.0]
 
+    print('calling oorb_element_transformation')
+    new_orb, err = pyoorb.pyoorb.oorb_element_transformation(
+        in_orbits=orbits,
+        in_element_type=1)
+    print("error code:", err)
+    for i in range(0, 3):
+        print(new_orb[i])
+
+    print('calling oorb_propagate (n-body)')
+    new_orb, err = pyoorb.pyoorb.oorb_propagation(
+        in_orbits=orbits,
+        in_epoch=ephem_dates[0],
+        in_dynmodel='N')
+    print("error code:", err)
+    for i in range(0, 3):
+        print(new_orb[i])
+
+    print('calling oorb_propagate (2-body)')
+    new_orb, err = pyoorb.pyoorb.oorb_propagation(
+        in_orbits=orbits,
+        in_epoch=ephem_dates[0],
+        in_dynmodel='2')
+    print("error code:", err)
+    for i in range(0, 3):
+        print(new_orb[i])
+
     print("calling oorb_ephemeris_covariance")
     eph, err = pyoorb.pyoorb.oorb_ephemeris_covariance(orbits,
                                                        covariances,
@@ -107,19 +136,21 @@ if __name__ == "__main__":
         for j in range(0, 2):
             print(eph[i][j])
 
-    print("calling oorb_ephemeris")
-    eph, err = pyoorb.pyoorb.oorb_ephemeris(in_orbits=orbits,
-                                            in_obscode=obscode,
-                                            in_date_ephems=ephem_dates)
+    print("calling oorb_ephemeris_full (n-body)")
+    eph, err = pyoorb.pyoorb.oorb_ephemeris_full(in_orbits=orbits,
+                                                 in_obscode=obscode,
+                                                 in_date_ephems=ephem_dates,
+                                                 in_dynmodel='N')
     print("error code:", err)
     for i in range(0, 3):
         for j in range(0, 2):
             print(eph[i][j])
 
-    print("calling oorb_ephemeris_2b")
-    eph, err = pyoorb.pyoorb.oorb_ephemeris_2b(in_orbits=orbits,
-                                               in_obscode=obscode,
-                                               in_date_ephems=ephem_dates)
+    print("calling oorb_ephemeris_full (2-body)")
+    eph, err = pyoorb.pyoorb.oorb_ephemeris_full(in_orbits=orbits,
+                                                 in_obscode=obscode,
+                                                 in_date_ephems=ephem_dates,
+                                                 in_dynmodel='2')
     print("error code:", err)
     for i in range(0, 3):
         for j in range(0, 2):
