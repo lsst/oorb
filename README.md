@@ -1,3 +1,20 @@
+### LSST installation directions ###
+
+If you have the LSST software stack available, you can simply build oorb as follows (after setting up the stack):
+
+- clone this repository
+- cd to the (new/cloned) directory, $OORB_DIR
+- use eupspkg to build the entire package: 
+ `eupspkg -v 1 -e prep`<br>
+ `eupspkg -v 1 -e config`<br>
+ `eupspkg -v 1 -e build`<br>
+-  you can now eups declare and setup the package, as normal for a git version of an LSST software package.
+
+
+### Without the LSST stack (original Oorb installation directions) ### 
+
+
+
 OpenOrb (or OOrb) is an open-source orbit-computation package.
 
 More detailed documentation is available by doing

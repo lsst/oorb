@@ -122,4 +122,3 @@ modules:
 clean:
 	rm -f *.o *~ core $(CONVERTER) $(TESTER) *.$(EPH_TYPE) \
               $(EPH_ASCII_DE$(EPH_TYPE)) header.$(EPH_TYPE)*
-
