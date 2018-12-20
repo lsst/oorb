@@ -28,6 +28,7 @@
 # Version: 2009-11-09
 
 include make.config
+include Makefile.include
 
 PREFIX ?= /opt/oorb
 
@@ -35,6 +36,11 @@ PREFIX ?= /opt/oorb
 backup:
 	$(SHELL) -c "if test -d ../backup_$(PROJNAME); then true; else mkdir ../backup_$(PROJNAME); fi"
 	cp -a * ../backup_$(PROJNAME)
+
+# Build binary and Python module
+all:
+	cd $(MAINPATH)   && $(MAKE) oorb
+	cd $(PYTHONPATH) && $(MAKE) pyoorb
 
 # Make tar-ball:
 tar: all_clean
@@ -49,6 +55,7 @@ all_clean: clean
 	cd $(LIBPATH)    ; $(MAKE) clean
 
 install:
+	@echo "Installing into $(PREFIX)"
 	mkdir -p $(PREFIX)/bin
 	mkdir -p $(PREFIX)/etc
 	mkdir -p $(PREFIX)/lib
@@ -56,9 +63,9 @@ install:
 	mkdir -p $(PREFIX)/python
 	cp -a main/oorb $(PREFIX)/bin/
 	cp -a main/oorb.conf $(PREFIX)/etc/
-	cp -a lib/* $(PREFIX)/lib/
-	cp -a data/* $(PREFIX)/data/
-	cp -a python/* $(PREFIX)/python/
+	cp -a lib/liboorb* $(PREFIX)/lib/
+	cp -a data/* $(PREFIX)/data/ && rm -rf "$(PREFIX)/data/JPL_ephemeris"
+	cp -a python/pyoorb*.so $(PREFIX)/python/
 
 # Remove library and modules:
 clean:

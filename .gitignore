@@ -13,3 +13,14 @@ data/JPL_ephemeris/ascp*
 data/JPL_ephemeris/header*
 data/de4*.dat
 Makefile.include
+prefix.h
+prefix.include
+data/JPL_ephemeris/de430.dat
+data/JPL_ephemeris/ephtester
+data/JPL_ephemeris/testpo.430
+data/JPL_ephemeris/ascp*.430
+data/JPL_ephemeris/ascii.430
+data/JPL_ephemeris/header.430*
+data/de430.dat
+lib/liboorb.*
+python/liboorb.*
