@@ -697,15 +697,9 @@ CONTAINS
           phase = ACOS(cos_phase)
 
           ! apparent brightness
-          IF (in_orbits(i,8) .EQ. 2) THEN
-             ! if the target is a comet (elements type == 'COM')
-             vmag = in_orbits(i,11)+5*LOG10(coordinates(1))+2.5*in_orbits(i,12)*LOG10(SQRT(heliocentric_r2))
-          ELSE
-             ! if the target is not a comet (any other elements type)
-             vmag = getApparentHGMagnitude(H=in_orbits(i,11), &
+          vmag = getApparentHGMagnitude(H=in_orbits(i,11), &
                G=in_orbits(i,12), r=SQRT(heliocentric_r2), &
                Delta=coordinates(1), phase_angle=phase)
-          END IF
 
           IF (error) THEN
              CALL errorMessage('oorb / ephemeris', &
@@ -1106,15 +1100,9 @@ CONTAINS
           phase = ACOS(cos_phase)
 
           ! apparent brightness
-          IF (in_orbits(i,8) .EQ. 2) THEN
-             ! if the target is a comet (elements type == 'COM')
-             vmag = in_orbits(i,11)+5*LOG10(coordinates(1))+2.5*in_orbits(i,12)*LOG10(SQRT(heliocentric_r2))
-          ELSE
-             ! if the target is not a comet (any other elements type)
-             vmag = getApparentHGMagnitude(H=in_orbits(i,11), &
-               G=in_orbits(i,12), r=SQRT(heliocentric_r2), &
-               Delta=coordinates(1), phase_angle=phase)
-          END IF
+          vmag = getApparentHGMagnitude(H=in_orbits(i,11), &
+              G=in_orbits(i,12), r=SQRT(heliocentric_r2), &
+              Delta=coordinates(1), phase_angle=phase)
 
           IF (error) THEN
              CALL errorMessage('oorb / ephemeris', &
@@ -1169,8 +1157,6 @@ CONTAINS
           CALL NULLIFY(ephemerides(1,j))
           CALL NULLIFY(orb_lt_corr_arr(1,j))
 
-          WRITE (*,*) true_anom/rad_deg
-          
        END DO
        CALL NULLIFY(orb_arr(1))
        DEALLOCATE(ephemerides, orb_lt_corr_arr)
