@@ -76,7 +76,7 @@ CONTAINS
     IF (error) THEN
        error_code = 1
        error = .FALSE.
-       RETURN       
+       RETURN
     END IF
 
     ! Read TAI-UTC.dat and ET-UT.dat
@@ -84,7 +84,7 @@ CONTAINS
     IF (error) THEN
        error_code = 2
        error = .FALSE.
-       RETURN       
+       RETURN
     END IF
 
     ! Read de430.dat
@@ -97,7 +97,7 @@ CONTAINS
        END IF
     ELSE
        CALL JPL_ephemeris_init(error, &
-            filename=TRIM(OORB_DATA_DIR) // "/" // TRIM(EPH_FNAME)) 
+            filename=TRIM(OORB_DATA_DIR) // "/" // TRIM(EPH_FNAME))
        IF (error) THEN
           error_code = 4
           error = .FALSE.
@@ -352,20 +352,101 @@ CONTAINS
           out_orbits(i,6) = out_orbits(i,6)/rad_deg
           out_orbits(i,7) = out_orbits(i,7)/rad_deg
        END IF
-          
+
        ! Set element type (same as input element type)
        out_orbits(i,8) = in_orbits(i,8)
        out_orbits(i,9) = in_epoch(1)
        out_orbits(i,10) = in_epoch(2)
        out_orbits(i,11) = in_orbits(i,11)
-       out_orbits(i,12) = in_orbits(i,12)       
+       out_orbits(i,12) = in_orbits(i,12)
        CALL NULLIFY(orb)
        CALL NULLIFY(t1)
     END DO
 
   END SUBROUTINE oorb_propagation
 
-  
+
+  SUBROUTINE oorb_observer(in_ndate, &
+       in_date_ephems,               &
+       in_obscode,                   &
+       out_obs,                      &
+       error_code)
+
+    ! in_ndate: number of input epochs
+    INTEGER, INTENT(in)                                 :: in_ndate
+    ! in_date_ephems: epochs for ephemeris:
+    ! (1) modified Julian date
+    ! (2) timescale type ('UTC': 1, 'UT1': 2, 'TT': 3, 'TAI': 4)
+    REAL(8), DIMENSION(in_ndate,2), INTENT(in)          :: in_date_ephems ! (1:ndate,1:2)
+    ! in_obscode: observatory code as defined by the Minor Planet Center
+    CHARACTER(len=*), INTENT(in)                        :: in_obscode
+    ! out_obs: output oberver location, 33 columns per target and epoch:
+    ! (1) modified julian date
+    ! (2 heliocentric ecliptic cartesian coordinates for the observatory (au)
+    ! (3) heliocentric ecliptic cartesian coordinates for the observatory (au)
+    ! (4) heliocentric ecliptic cartesian coordinates for the observatory (au)
+    REAL(8), DIMENSION(in_ndate,4), INTENT(out) :: out_obs ! (1:ndate,1:4)
+    ! error_code: output error code
+    INTEGER, INTENT(out)                                :: error_code
+
+    ! Internal variables.
+    TYPE (CartesianCoordinates), DIMENSION(:), ALLOCATABLE :: observers
+    TYPE (Time) :: t
+    INTEGER :: i
+    REAL(8) :: mjd
+    REAL(8), DIMENSION(6) :: h_ecl_car_coord_obsy
+
+    ! Init
+    errstr = ""
+    error_code = 0
+
+    ALLOCATE(observers(SIZE(in_date_ephems,dim=1)))
+    DO i=1,SIZE(in_date_ephems,dim=1)
+       CALL NEW(t, in_date_ephems(i,1), timescales(NINT(in_date_ephems(i,2))))
+       IF (error) THEN
+          ! Error in creating a new Time object.
+          error_code = 35
+          RETURN
+       END IF
+       ! Compute heliocentric observatory coordinates
+       observers(i) = getObservatoryCCoord(obsies, in_obscode, t)
+       IF (error) THEN
+          ! Error in getObservatoryCCoord()
+          error_code = 36
+          RETURN
+       END IF
+       CALL rotateToEquatorial(observers(i))
+
+       ! Parameters relevant for Earth-based observers
+       ! ephem date
+       t = getTime(observers(i))
+       mjd = getMJD(t, timescales(NINT(in_date_ephems(i,2))))
+
+       ! Extract heliocentric ecliptic cartesian coordinates for the observer
+       CALL rotateToEcliptic(observers(i))
+       h_ecl_car_coord_obsy = getCoordinates(observers(i))
+       IF (error) THEN
+          CALL errorMessage('oorb / ephemeris', &
+               'TRACE BACK (95)',1)
+          STOP
+       END IF
+
+       ! Write the output ephem array.
+       out_obs(i,1) = mjd                                       ! modified julian date
+       out_obs(i,2) = h_ecl_car_coord_obsy(1)                   ! heliocentric ecliptic cartesian coordinates for the observatory (au)
+       out_obs(i,3) = h_ecl_car_coord_obsy(2)                   ! heliocentric ecliptic cartesian coordinates for the observatory (au)
+       out_obs(i,4) = h_ecl_car_coord_obsy(3)                   ! heliocentric ecliptic cartesian coordinates for the observatory (au)
+
+       CALL NULLIFY(t)
+    END DO
+    DO i=1,SIZE(observers)
+      CALL NULLIFY(observers(i))
+    END DO
+    DEALLOCATE(observers)
+
+  END SUBROUTINE oorb_observer
+
+
   SUBROUTINE oorb_ephemeris_full(in_norb, &
        in_orbits,                    &
        in_obscode,                   &
@@ -374,7 +455,7 @@ CONTAINS
        in_dynmodel,                  &
        out_ephems,                   &
        error_code)
- 
+
     ! in_norb: number of input orbits
     INTEGER, INTENT(in)                                 :: in_norb
     ! in_orbits: input flattened orbits, 12 columns per target:
@@ -400,45 +481,45 @@ CONTAINS
     ! in_model: "2"=2-body dynamical model, "N"=n-body dynamical model
     CHARACTER(len=1), INTENT(in)                        :: in_dynmodel
     ! out_ephemn: output ephemeris, 33 columns per target and epoch:
-    ! (1) modified julian date                                                                
-    ! (2) right ascension (deg)                                                               
-    ! (3) declination (deg)                                                                   
-    ! (4) dra/dt sky-motion (deg/day, including cos(dec) factor)                              
-    ! (5) ddec/dt sky-motion (deg/day)                                                        
-    ! (6) solar phase angle (deg)                                                             
-    ! (7) solar elongation angle (deg)                                                        
-    ! (8) heliocentric distance (au)                                                          
-    ! (9) geocentric distance (au)                                                            
-    ! (10) predicted apparent V-band magnitude                                                 
-    ! (11) position angle for direction of motion (deg)                                        
-    ! (12) topocentric ecliptic longitude (deg)                                                
-    ! (13) topocentric ecliptic latitude (deg)                                                 
-    ! (14) opposition-centered topocentric ecliptic longitude (deg)                            
-    ! (15) opposition-centered topocentric ecliptic latitude (deg)                             
-    ! (16) heliocentric ecliptic longitude (deg)                                               
-    ! (17) heliocentric ecliptic latitude (deg)                                                
-    ! (18) opposition-centered heliocentric ecliptic longitude (deg)                           
-    ! (19) opposition-centered heliocentric ecliptic latitude (deg)                            
-    ! (20) topocentric object altitude (deg)                                                   
-    ! (21) topocentric solar altitude (deg)                                                    
-    ! (22) topocentric lunar altitude (deg)                                                    
-    ! (23) lunar phase [0...1]                                                                 
-    ! (24) lunar elongation (deg, distance between the target and the Moon)                    
-    ! (25) heliocentric ecliptic cartesian x coordinate for the object (au)                    
-    ! (26) heliocentric ecliptic cartesian y coordinate for the object (au)                    
-    ! (27) heliocentric ecliptic cartesian z coordinate for the objects (au)                   
-    ! (28) heliocentric ecliptic cartesian x rate for the object (au/day))                     
-    ! (29) heliocentric ecliptic cartesian y rate for the object (au/day)                      
-    ! (30) heliocentric ecliptic cartesian z rate for the objects (au/day)                     
-    ! (31) heliocentric ecliptic cartesian coordinates for the observatory (au)                
-    ! (32) heliocentric ecliptic cartesian coordinates for the observatory (au)                
+    ! (1) modified julian date
+    ! (2) right ascension (deg)
+    ! (3) declination (deg)
+    ! (4) dra/dt sky-motion (deg/day, including cos(dec) factor)
+    ! (5) ddec/dt sky-motion (deg/day)
+    ! (6) solar phase angle (deg)
+    ! (7) solar elongation angle (deg)
+    ! (8) heliocentric distance (au)
+    ! (9) geocentric distance (au)
+    ! (10) predicted apparent V-band magnitude
+    ! (11) position angle for direction of motion (deg)
+    ! (12) topocentric ecliptic longitude (deg)
+    ! (13) topocentric ecliptic latitude (deg)
+    ! (14) opposition-centered topocentric ecliptic longitude (deg)
+    ! (15) opposition-centered topocentric ecliptic latitude (deg)
+    ! (16) heliocentric ecliptic longitude (deg)
+    ! (17) heliocentric ecliptic latitude (deg)
+    ! (18) opposition-centered heliocentric ecliptic longitude (deg)
+    ! (19) opposition-centered heliocentric ecliptic latitude (deg)
+    ! (20) topocentric object altitude (deg)
+    ! (21) topocentric solar altitude (deg)
+    ! (22) topocentric lunar altitude (deg)
+    ! (23) lunar phase [0...1]
+    ! (24) lunar elongation (deg, distance between the target and the Moon)
+    ! (25) heliocentric ecliptic cartesian x coordinate for the object (au)
+    ! (26) heliocentric ecliptic cartesian y coordinate for the object (au)
+    ! (27) heliocentric ecliptic cartesian z coordinate for the objects (au)
+    ! (28) heliocentric ecliptic cartesian x rate for the object (au/day))
+    ! (29) heliocentric ecliptic cartesian y rate for the object (au/day)
+    ! (30) heliocentric ecliptic cartesian z rate for the objects (au/day)
+    ! (31) heliocentric ecliptic cartesian coordinates for the observatory (au)
+    ! (32) heliocentric ecliptic cartesian coordinates for the observatory (au)
     ! (33) heliocentric ecliptic cartesian coordinates for the observatory (au)
     ! (34) true anomaly
     REAL(8), DIMENSION(in_norb,in_ndate,34), INTENT(out) :: out_ephems ! (1:norb,1:ndate,1:34)
     ! error_code: output error code
     INTEGER, INTENT(out)                                :: error_code
 
-    ! Internal variables.  
+    ! Internal variables.
     TYPE (Orbit), DIMENSION(:,:), POINTER :: orb_lt_corr_arr
     TYPE (Orbit), DIMENSION(1) :: orb_arr
     TYPE (CartesianCoordinates), DIMENSION(:), ALLOCATABLE :: observers
@@ -454,7 +535,7 @@ CONTAINS
          elements, &
          comp_coord, &
          h_ecl_car_coord_obsy, &
-         h_ecl_car_coord_obj         
+         h_ecl_car_coord_obj
     REAL(8), DIMENSION(3) :: obsy_obj, &
          obsy_pos, &
          geoc_obsy, &
@@ -534,7 +615,7 @@ CONTAINS
 
     ! Loop over orbits:
     DO i=1,SIZE(in_orbits,dim=1)
-    
+
        ! Get the element type from the input flattened orbit.
        IF(NINT(in_orbits(i,8)) < 0 .OR.                                       &
             NINT(in_orbits(i,8)) > SIZE(element_types)) THEN
@@ -588,7 +669,7 @@ CONTAINS
           RETURN
        END IF
        !CALL NULLIFY(orb_arr(1))
-   
+
        ! Now export the ephem_arr to a flat array.
        DO j=1,SIZE(observers)
 
@@ -598,7 +679,7 @@ CONTAINS
           ! coordinates(1) = Delta
           ! coordinates(2) = ra
           ! coordinates(3) = dec
-          ! coordinates(4) = dDelta 
+          ! coordinates(4) = dDelta
           ! coordinates(5) = dra (to be multiplied with cos(coordinates(3))
           ! coordinates(6) = ddec
 
@@ -609,7 +690,7 @@ CONTAINS
               END IF
 
           ! Extract topocentric ecliptic lon and lat
-          CALL rotateToEcliptic(ephemerides(1,j))        
+          CALL rotateToEcliptic(ephemerides(1,j))
           comp_coord = getCoordinates(ephemerides(1, j))
           IF (error) THEN
              CALL errorMessage('oorb / ephemeris', &
@@ -706,7 +787,7 @@ CONTAINS
                   'TRACE BACK (70)',1)
              STOP
           END IF
-         
+
           ! Parameters relevant for Earth-based observers
 
           ! ephem date
@@ -721,7 +802,7 @@ CONTAINS
              STOP
           END IF
 
-          CALL rotateToEquatorial(obsy_ccoord)        
+          CALL rotateToEquatorial(obsy_ccoord)
           geoc_obsy = getPosition(obsy_ccoord)
 
           IF (error) THEN
@@ -731,10 +812,10 @@ CONTAINS
           END IF
 
           CALL NULLIFY(t)
-          
+
           vec3 = cross_product(geoc_obsy,obsy_obj)
           obj_alt = pi/2.0_bp - ATAN2(SQRT(SUM(vec3**2)),DOT_PRODUCT(geoc_obsy,obsy_obj))
-          
+
           ! Compute (approximate) altitude of the Sun
           ! Position of the geocenter as seen from the Sun:
           planeph => JPL_ephemeris(mjd_tt, 3, 11, error)
@@ -752,7 +833,7 @@ CONTAINS
           ! Compute the solar elongation:
           vec3 = cross_product(obsy_obj,obsy_sun)
           solar_elongation = ATAN2(SQRT(SUM(vec3**2)),DOT_PRODUCT(obsy_obj,obsy_sun))
-          
+
           ! Compute phase of the Moon:
           ! Position of the Moon as seen from the Sun:
           planeph => JPL_ephemeris(mjd_tt, 10, 11, error)
@@ -810,7 +891,7 @@ CONTAINS
              ecc_anom = -99.0_bp
              true_anom = -99.0_bp
           END IF
-          
+
           ! Write the output ephem array.
           out_ephems(i,j,1) = mjd                                        ! modified julian date
           out_ephems(i,j,2) = coordinates(2)/rad_deg                     ! right ascension (deg)
@@ -845,11 +926,11 @@ CONTAINS
           out_ephems(i,j,31) = h_ecl_car_coord_obsy(1)                   ! heliocentric ecliptic cartesian coordinates for the observatory (au)
           out_ephems(i,j,32) = h_ecl_car_coord_obsy(2)                   ! heliocentric ecliptic cartesian coordinates for the observatory (au)
           out_ephems(i,j,33) = h_ecl_car_coord_obsy(3)                   ! heliocentric ecliptic cartesian coordinates for the observatory (au)
-          out_ephems(i,j,34) = true_anom/rad_deg                         ! true anomaly (deg)                                                           
+          out_ephems(i,j,34) = true_anom/rad_deg                         ! true anomaly (deg)
 
           CALL NULLIFY(ephemerides(1,j))
           CALL NULLIFY(orb_lt_corr_arr(1,j))
-          
+
        END DO
        CALL NULLIFY(orb_arr(1))
        DEALLOCATE(ephemerides, orb_lt_corr_arr)
@@ -871,7 +952,7 @@ CONTAINS
        in_dynmodel,                  &
        out_ephems,                   &
        error_code)
- 
+
     ! in_norb: number of input orbits
     INTEGER, INTENT(in)                                 :: in_norb
     ! in_orbits: input flattened orbits, 12 columns per target:
@@ -897,24 +978,24 @@ CONTAINS
     ! in_model: "2"=2-body dynamical model, "N"=n-body dynamical model
     CHARACTER(len=1), INTENT(in)                        :: in_dynmodel
     ! out_ephemn: output ephemeris, 33 columns per target and epoch:
-    ! (1) modified julian date                                                                
-    ! (2) right ascension (deg)                                                               
-    ! (3) declination (deg)                                                                   
-    ! (4) dra/dt sky-motion (deg/day, including cos(dec) factor)                              
-    ! (5) ddec/dt sky-motion (deg/day)                                                        
-    ! (6) solar phase angle (deg)                                                             
-    ! (7) solar elongation angle (deg)                                                        
-    ! (8) heliocentric distance (au)                                                          
-    ! (9) geocentric distance (au)                                                            
+    ! (1) modified julian date
+    ! (2) right ascension (deg)
+    ! (3) declination (deg)
+    ! (4) dra/dt sky-motion (deg/day, including cos(dec) factor)
+    ! (5) ddec/dt sky-motion (deg/day)
+    ! (6) solar phase angle (deg)
+    ! (7) solar elongation angle (deg)
+    ! (8) heliocentric distance (au)
+    ! (9) geocentric distance (au)
     ! (10) predicted apparent V-band magnitude
     ! (11) true anomaly
 
-    
+
     REAL(8), DIMENSION(in_norb,in_ndate,11), INTENT(out) :: out_ephems ! (1:norb,1:ndate,1:11)
     ! error_code: output error code
     INTEGER, INTENT(out)                                :: error_code
 
-    ! Internal variables.  
+    ! Internal variables.
     TYPE (Orbit), DIMENSION(:,:), POINTER :: orb_lt_corr_arr
     TYPE (Orbit), DIMENSION(1) :: orb_arr
     TYPE (CartesianCoordinates), DIMENSION(:), ALLOCATABLE :: observers
@@ -930,7 +1011,7 @@ CONTAINS
          elements, &
          comp_coord, &
          h_ecl_car_coord_obsy, &
-         h_ecl_car_coord_obj         
+         h_ecl_car_coord_obj
     REAL(8), DIMENSION(3) :: obsy_obj, &
          obsy_pos, &
          geoc_obsy, &
@@ -989,7 +1070,7 @@ CONTAINS
 
     ! Loop over orbits:
     DO i=1,SIZE(in_orbits,dim=1)
-    
+
        ! Get the element type from the input flattened orbit.
        IF(NINT(in_orbits(i,8)) < 0 .OR.                                       &
             NINT(in_orbits(i,8)) > SIZE(element_types)) THEN
@@ -1043,7 +1124,7 @@ CONTAINS
           RETURN
        END IF
 
-   
+
        ! Now export the ephem_arr to a flat array.
        DO j=1,SIZE(observers)
 
@@ -1053,7 +1134,7 @@ CONTAINS
           ! coordinates(1) = Delta
           ! coordinates(2) = ra
           ! coordinates(3) = dec
-          ! coordinates(4) = dDelta 
+          ! coordinates(4) = dDelta
           ! coordinates(5) = dra (to be multiplied with cos(coordinates(3))
           ! coordinates(6) = ddec
 
@@ -1109,7 +1190,7 @@ CONTAINS
                   'TRACE BACK (70)',1)
              STOP
           END IF
-         
+
           ! Compute (approximate) altitude of the Sun
           ! Position of the geocenter as seen from the Sun:
           planeph => JPL_ephemeris(mjd_tt, 3, 11, error)
@@ -1141,7 +1222,7 @@ CONTAINS
              ecc_anom = -99.0_bp
              true_anom = -99.0_bp
           END IF
-          
+
           ! Write the output ephem array.
           out_ephems(i,j,1) = mjd                                        ! modified julian date
           out_ephems(i,j,2) = coordinates(2)/rad_deg                     ! right ascension (deg)
@@ -1153,7 +1234,7 @@ CONTAINS
           out_ephems(i,j,8) = SQRT(heliocentric_r2)                      ! heliocentric distance (au)
           out_ephems(i,j,9) = coordinates(1)                             ! geocentric distance (au)
           out_ephems(i,j,10) = vmag                                      ! predicted apparent V-band magnitude
-          out_ephems(i,j,11) = true_anom/rad_deg                         ! true anomaly (deg)                                                           
+          out_ephems(i,j,11) = true_anom/rad_deg                         ! true anomaly (deg)
           CALL NULLIFY(ephemerides(1,j))
           CALL NULLIFY(orb_lt_corr_arr(1,j))
 
@@ -1168,7 +1249,7 @@ CONTAINS
     DEALLOCATE(observers)
 
   END SUBROUTINE oorb_ephemeris_basic
-  
+
 
   SUBROUTINE oorb_ephemeris_covariance(in_norb, &
        in_orbits,                    &
@@ -1189,7 +1270,7 @@ CONTAINS
     ! values so that they look the same as the values returned by
     ! oorb_ephemeris_basic, but then still add the uncertainty ellipse
     ! at the end."
-    
+
     ! in_norb: number of input orbits
     INTEGER, INTENT(in)                                  :: in_norb
     ! in_orbits: input flattened orbits, 12 columns per target:
@@ -1216,14 +1297,14 @@ CONTAINS
     REAL(8), DIMENSION(in_ndate,2), INTENT(in)            :: in_date_ephems ! (1:ndate,1:2)
     ! out_ephem: output ephemeris, 14 columns per target and epoch:
     ! (1) distance from the observer (au)
-    ! (2) right ascension (deg)                                                               
-    ! (3) declination (deg)                                                                   
-    ! (4) predicted apparent V-band magnitude                                                 
-    ! (5) epoch (modified Julian date) 
+    ! (2) right ascension (deg)
+    ! (3) declination (deg)
+    ! (4) predicted apparent V-band magnitude
+    ! (5) epoch (modified Julian date)
     ! (6) timescale type
-    ! (7) dra/dt sky-motion (deg/day, including cos(dec) factor)                              
-    ! (8) ddec/dt sky-motion (deg/day)                                                        
-    ! (9) solar phase angle (deg)                                                             
+    ! (7) dra/dt sky-motion (deg/day, including cos(dec) factor)
+    ! (8) ddec/dt sky-motion (deg/day)
+    ! (9) solar phase angle (deg)
     ! (10) ra uncertainty (arcsec)
     ! (11) dec uncertainty (arcsec)
     ! (12) semi-major axis of the uncertainty ellipse (arcmin)
@@ -1233,7 +1314,7 @@ CONTAINS
     ! error_code: output error code
     INTEGER, INTENT(out)                                  :: error_code
 
-    ! Internal variables.  
+    ! Internal variables.
     TYPE (StochasticOrbit) :: storb
     TYPE (Orbit), DIMENSION(:,:), POINTER :: orb_lt_corr_arr
     TYPE (Orbit), DIMENSION(1) :: orb_arr
