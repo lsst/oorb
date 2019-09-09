@@ -47,6 +47,8 @@ PROGRAM oorb
   USE io
 
   IMPLICIT NONE
+  INCLUDE "version.h"
+
   TYPE (PhysicalParameters) :: &
        physparam
   TYPE (StochasticOrbit), DIMENSION(:), ALLOCATABLE :: &
@@ -399,7 +401,7 @@ PROGRAM oorb
 
   IF (get_cl_option("--version",.FALSE.)) THEN
      WRITE(stdout,"(A)") ""
-     WRITE(stdout,"(A)") "OpenOrb v1.0.1"
+     WRITE(stdout,"(A)") "OpenOrb v" // VERSION
      WRITE(stdout,"(A)") "Copyright 2011 Mikael Granvik, Jenni Virtanen, Karri Muinonen,"
      WRITE(stdout,"(A)") "               Teemu Laakso, Dagmara Oszkiewicz"
      WRITE(stdout,"(A)") ""
@@ -7590,7 +7592,7 @@ PROGRAM oorb
            mag = mags(j) - 5.0_bp*LOG10(SQRT(heliocentric_r2*ephemeris_r2))
 
            ! Filter transformations to V:
-           IF (obsy_code_arr(j) == "F51") THEN
+           IF (obsy_code_arr(j) == "F51" .and. obsy_code_arr(j) == "F52") THEN
 
               ! PS1SC internal analysis by A. Fitzsimmons 08-11-2011.
               ! Average results for (S+C).
@@ -7610,7 +7612,7 @@ PROGRAM oorb
               CASE default
                  IF (error) THEN
                     CALL errorMessage('oorb / phasecurve', &
-                         'Unknown filter for F51: ' // TRIM(filters(j)),1)
+                         'Unknown filter for F51 or F52: ' // TRIM(filters(j)),1)
                     STOP
                  END IF
               END SELECT

@@ -15,30 +15,43 @@ fitting capabilities will be added in the near future.
 
 Some documentation and installation guides can be found below - more
 documentation will be added in the near future. Please refer to the
-``test.py`` file for some example usecases, as well as `Lynne Jones'
-Jupyter notebook
-<https://github.com/rhiannonlynne/notebooks/blob/master/PyOorb%20Demo.ipynb>`_.
+documentation below, the included ``test.py`` file, as well as `Lynne
+Jones' Jupyter notebook
+<https://github.com/rhiannonlynne/notebooks/blob/master/PyOorb%20Demo.ipynb>`_
+for some example usecases.
 
-Convenience functions for the use of this module will be provided in
-the framework of the `sbpy <http://sbpy.org>`_ project.
+Convenience functions for the use of this module are provided in the
+framework of the `sbpy <http://sbpy.org>`_ project. Please refer to
+the `sbpy.data` module for `more information
+<https://sbpy.readthedocs.io/en/latest/sbpy/data.html>`_.
 
 Installation
 ------------
 
+``pyoorb`` is automatically installed alongside ``oorb`` if the `conda
+installer <https://github.com/conda-forge/openorb-feedstock>`_ has
+been used. This is the **recommended installation method** and by far
+the easiest method, as well.
+
+Manual installation procedures are provided here in case you do not
+want to use the conda installer:
+
 0. This is not a requirement but highly recommended: get the latest
    version of `Anaconda <https://www.anaconda.com/download>`_ Python
-   3.6 and make it your default Python before you install OpenOrb.
+   3.6 and make it your default Python before you install OpenOrb. Ensure
+   you have ``numpy`` and ``pytest`` installed by running:
+
+       >>> conda install numpy pytest
 
 1. Follow the OpenOrb installation guidelines including the generation
    and updating of the data files (no need to update ``ET minus UT``
    and ``TAI minus UTC``)
 
-2. From the ``oorb/python``
-   directory, run the following commands to build pyoorb:
+2. From the root directory, run:
 
-       >>> make clean
-       >>> make
        >>> make pyoorb
+
+   The shared library will be built in ``oorb/python``.
        
 3. A few environment variables have to be set before pyoorb can be
    used from any location on your machine. In order to do so, open
@@ -65,6 +78,11 @@ Installation
    functions and should generate a lot of numerical output. Each
    function should complete with error code 0.
 
+   For a more comprehensive list of tests, run:
+
+       >>> make test
+
+   from the root ``oorb`` directory.
 
 Documentation/API
 -----------------
@@ -97,10 +115,8 @@ coordinates):
 9. `epoch` of the osculating elements (modified Julian date)
 10. `timescale type` of the epochs provided; integer value: ``UTC``:
     1, ``UT1``: 2, ``TT``: 3, ``TAI``: 4
-11. `absolute magnitude` (``KEP`` or ``CART``) or `M1` parameter
-    (``COM``)
-12. `photometric slope parameter` (``KEP`` or ``CART``) or `K1`
-    parameter (``COM``)
+11. `absolute magnitude` of the target 
+12. `photometric slope parameter` of the target 
 
 In order to provide compatibility with the underlying FORTRAN library,
 only use double values (``dtype=np.double``) and set the corresponding
@@ -144,14 +160,20 @@ Initializing pyoorb
 ^^^^^^^^^^^^^^^^^^^
 
 Before any pyoorb functionality can be used, the module has to be
-initialized using the following lines:
+initialized using the following two lines:
+
+    >>> import pyoorb as oo
+    >>> oo.pyoorb.oorb_init()
+
+In case you installed ``pyoorb`` manually (i.e., you did not use the
+conda installer), you have to manually define which ephemerides to
+use:
 
     >>> import os
-    >>> import pyoorb as oo
     >>> ephfile = os.path.join(os.getenv('OORB_DATA'), 'de430.dat')
     >>> oo.pyoorb.oorb_init(ephfile)
 
-The initialization requires the ``'OORB_DATA'`` environment variable
+This initialization requires the ``'OORB_DATA'`` environment variable
 to be properly defined (see installation guide above). Note that in
 this example the ``DE430`` planetary and lunar ephemerides are used;
 other definition files can be used, but those have to be present in
