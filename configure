@@ -29,21 +29,47 @@
 # Version: 2009-11-13
 #
 
-# Extract options (--prefix)
+# Extract command-line options
+option_to_varname()
+{
+	# takes an option such as --with-foo as an argument
+	# and returns the corresponding variable name (FOO)
+	key="${1%=*}"
+	key="${key#--}"
+	key="${key#with-}"
+	echo "$key" | awk '{print toupper($0)}'
+}
+
+PREFIX='/usr/local'
+PYOORB=0
+
+PYTHON=python
+F2PY="f2py"
+PYTEST="py.test"
+ADDLIBS=
+ADDOPTS=
+COVERAGE=
+
 POSITIONAL=()
-PREFIX=""
 while [[ $# -gt 0 ]]
 do
 	key="$1"
 	case "$key" in
-		--prefix=*)
-			PREFIX="${key#*=}"
+		# Simple options with an argument
+		--prefix=*|--with-python=*|--with-f2py=*|--with-pytest=*)
+			eval "$(option_to_varname $key)='${key#*=}'"
 			shift;
 		;;
 
-		--prefix)
-			PREFIX="$2"
+		--with-pyoorb)
+			eval "$(option_to_varname $key)=1"
 			shift;
+		;;
+		
+		--coverage)
+			COVERAGE=on
+			ADDLIBS="$ADDLIBS -lgcov"
+			ADDOPTS="$ADDOPTS -coverage"
 			shift;
 		;;
 
@@ -55,8 +81,14 @@ do
 done
 set -- "${POSITIONAL[@]}" # restore positional parameters
 
+# --coverage only works with gfortran; verify gfortran is being used
+if [[ ! -z $COVERAGE && $1 != gfortran ]]; then
+	echo "Error: --coverage option only works with the gfortran compiler".
+	exit -1
+fi
+
 # Make sure $PREFIX is an absolute path
-if [[ ! -z "$PREFIX" && $PREFIX != /* ]]; then
+if [[ $PREFIX != /* ]]; then
 	echo "Argument to --prefix must be an absolute path beginning with a '/'"
 	exit -1
 fi
@@ -120,6 +152,7 @@ elif [[ $1 == intel ]] ; then
     fi
     echo 'FC_INC = $(FC_INC_INTEL)' >> $include_file
     echo 'FC_SHARED = $(FC_SHARED_INTEL)' >> $include_file
+    echo 'F2PY_FCOMPILER = $(F2PY_FCOMPILER_INTEL)' >> $include_file
 
 elif [[ $1 == lahey ]] ; then
 
@@ -160,12 +193,13 @@ elif [[ $1 == gfortran ]] ; then
 
     echo 'FC = $(FC_GFORTRAN)' > $include_file
     if [[ $2 == opt ]] ; then
-	echo 'FCOPTIONS = $(FCOPTIONS_OPT_GFORTRAN)' >> $include_file
+	echo 'FCOPTIONS = $(FCOPTIONS_OPT_GFORTRAN)'"$ADDOPTS" >> $include_file
     else
-	echo 'FCOPTIONS = $(FCOPTIONS_DEB_GFORTRAN)' >> $include_file
+	echo 'FCOPTIONS = $(FCOPTIONS_DEB_GFORTRAN)'"$ADDOPTS" >> $include_file
     fi
     echo 'FC_INC = $(FC_INC_GFORTRAN)' >> $include_file
     echo 'FC_SHARED = $(FC_SHARED_GFORTRAN)' >> $include_file
+    echo 'F2PY_FCOMPILER = $(F2PY_FCOMPILER_GFORTRAN)' >> $include_file
 
 else
 
@@ -185,6 +219,11 @@ else
 fi
 
 # Store PREFIX for use by 'make install'
-if [[ ! -z "$PREFIX" ]]; then
-	echo "PREFIX=$PREFIX" >> "$include_file"
-fi
+echo "PREFIX=$PREFIX" >> "$include_file"
+
+# Store the name of the python and f2py executables
+echo "PYOORB=$PYOORB" >> "$include_file"
+echo "PYTHON=$PYTHON" >> "$include_file"
+echo "F2PY=$F2PY"     >> "$include_file"
+echo "PYTEST=$PYTEST" >> "$include_file"
+echo "ADDLIBS=$ADDLIBS" >> "$include_file"
