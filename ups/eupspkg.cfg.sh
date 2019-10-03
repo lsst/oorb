@@ -15,7 +15,7 @@ prep()
 
 config()
 {
-	./configure gfortran opt
+	./configure gfortran opt --with-pyoorb
 }
 
 build()
@@ -25,29 +25,22 @@ build()
 	# Passing MAKEFLAGS can lead to odd errors in the gfortran compiler
 	( unset MAKEFLAGS )
 
-	# built & test OpenOrb
-	( cd main && make oorb )
+	# build OOrb and Python bindings
+	( make )
 
 	# update JPL Ephemeris files and make 405 and 430 ephemeris files
         (
             export EPH_TYPE=405
-	    cd data/JPL_ephemeris && make && make test
+	    make ephem
         )
         (
             export EPH_TYPE=430
-            cd data/JPL_ephemeris && make && make test
+            make ephem
         )
 
-	# build & test python bindings
+	# run tests
 	(
-		cd python
-		make pyoorb
-
-		export OORB_CONF="$PKGROOT/main"
-		export OORB_DATA="$PKGROOT/data"
-		export LD_LIBRARY_PATH="$PKGROOT/lib:$LD_LIBRARY_PATH"
-		export DYLD_LIBRARY_PATH="$PKGROOT/lib:$DYLD_LIBRARY_PATH"
-		python test.py
+	    make test
 	)
 
 }

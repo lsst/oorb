@@ -151,8 +151,8 @@ CONTAINS
     ! (8) orbital elements type ('CART': 1, 'COM': 2, 'KEP': 3, 'DEL': 4, 'EQX': 5)
     ! (9) epoch in mjd
     ! (10) time scale type ('UTC': 1, 'UT1': 2, 'TT': 3, 'TAI': 4)
-    ! (11) target absolute magnitude H/M1 parameter for comets ('COM' elements type)
-    ! (12) target slope parameter G/K1 parameter for comets ('COM' elements type)
+    ! (11) target absolute magnitude H
+    ! (12) target slope parameter G
     REAL(8),DIMENSION(in_norb,12), INTENT(in)           :: in_orbits ! (1:norb,1:12)
     ! in_element_type: type of output elements ('CART': 1, 'COM': 2, 'KEP': 3, 'DEL': 4, 'EQX': 5)
     INTEGER, INTENT(in)                                 :: in_element_type
@@ -165,8 +165,8 @@ CONTAINS
     ! (8) orbital elements type ('CART': 1, 'COM': 2, 'KEP': 3, 'DEL': 4, 'EQX': 5)
     ! (9) epoch in mjd
     ! (10) time scale type ('UTC': 1, 'UT1': 2, 'TT': 3, 'TAI': 4)
-    ! (11) target absolute magnitude H/M1 parameter for comets ('COM' elements type)
-    ! (12) target slope parameter G/K1 parameter for comets ('COM' elements type)
+    ! (11) target absolute magnitude H
+    ! (12) target slope parameter G
     REAL(8),DIMENSION(in_norb,12), INTENT(out)          :: out_orbits ! (1:norb,1:12)
     ! error_code: output error code
     INTEGER, INTENT(out)                                :: error_code
@@ -239,8 +239,8 @@ CONTAINS
     ! (8) orbital elements type ('CART': 1, 'COM': 2, 'KEP': 3, 'DEL': 4, 'EQX': 5)
     ! (9) epoch in mjd
     ! (10) time scale type ('UTC': 1, 'UT1': 2, 'TT': 3, 'TAI': 4)
-    ! (11) target absolute magnitude H/M1 parameter for comets ('COM' elements type)
-    ! (12) target slope parameter G/K1 parameter for comets ('COM' elements type)
+    ! (11) target absolute magnitude H
+    ! (12) target slope parameter G
     REAL(8),DIMENSION(in_norb,12), INTENT(in)           :: in_orbits ! (1:norb,1:12)
     ! in_epoch: epoch and timescale of output orbits:
     ! (1) modified Julian date
@@ -257,8 +257,8 @@ CONTAINS
     ! (8) orbital elements type ('CART': 1, 'COM': 2, 'KEP': 3, 'DEL': 4, 'EQX': 5)
     ! (9) epoch in mjd
     ! (10) time scale type ('UTC': 1, 'UT1': 2, 'TT': 3, 'TAI': 4)
-    ! (11) target absolute magnitude H/M1 parameter for comets ('COM' elements type)
-    ! (12) target slope parameter G/K1 parameter for comets ('COM' elements type)
+    ! (11) target absolute magnitude H
+    ! (12) target slope parameter G
     REAL(8),DIMENSION(in_norb,12), INTENT(out)          :: out_orbits ! (1:norb,1:12)
     ! error_code: output error code
     INTEGER, INTENT(out)                                :: error_code
@@ -386,8 +386,8 @@ CONTAINS
     ! (8) orbital elements type ('CART': 1, 'COM': 2, 'KEP': 3, 'DEL': 4, 'EQX': 5)
     ! (9) epoch in mjd
     ! (10) time scale type ('UTC': 1, 'UT1': 2, 'TT': 3, 'TAI': 4)
-    ! (11) target absolute magnitude H/M1 parameter for comets ('COM' elements type)
-    ! (12) target slope parameter G/K1 parameter for comets ('COM' elements type)
+    ! (11) target absolute magnitude H
+    ! (12) target slope parameter G
     REAL(8),DIMENSION(in_norb,12), INTENT(in)           :: in_orbits ! (1:norb,1:12)
     ! in_obscode: observatory code as defined by the Minor Planet Center
     CHARACTER(len=*), INTENT(in)                        :: in_obscode
@@ -883,8 +883,8 @@ CONTAINS
     ! (8) orbital elements type ('CART': 1, 'COM': 2, 'KEP': 3, 'DEL': 4, 'EQX': 5)
     ! (9) epoch in mjd
     ! (10) time scale type ('UTC': 1, 'UT1': 2, 'TT': 3, 'TAI': 4)
-    ! (11) target absolute magnitude H/M1 parameter for comets ('COM' elements type)
-    ! (12) target slope parameter G/K1 parameter for comets ('COM' elements type)
+    ! (11) target absolute magnitude H
+    ! (12) target slope parameter G
     REAL(8),DIMENSION(in_norb,12), INTENT(in)           :: in_orbits ! (1:norb,1:12)
     ! in_obscode: observatory code as defined by the Minor Planet Center
     CHARACTER(len=*), INTENT(in)                        :: in_obscode
@@ -1101,8 +1101,8 @@ CONTAINS
 
           ! apparent brightness
           vmag = getApparentHGMagnitude(H=in_orbits(i,11), &
-              G=in_orbits(i,12), r=SQRT(heliocentric_r2), &
-              Delta=coordinates(1), phase_angle=phase)
+               G=in_orbits(i,12), r=SQRT(heliocentric_r2), &
+               Delta=coordinates(1), phase_angle=phase)
 
           IF (error) THEN
              CALL errorMessage('oorb / ephemeris', &
@@ -1201,8 +1201,8 @@ CONTAINS
     ! (8) orbital elements type ('CART': 1, 'COM': 2, 'KEP': 3, 'DEL': 4, 'EQX': 5)
     ! (9) epoch in mjd
     ! (10) time scale type ('UTC': 1, 'UT1': 2, 'TT': 3, 'TAI': 4)
-    ! (11) target absolute magnitude H/M1 parameter for comets ('COM' elements type)
-    ! (12) target slope parameter G/K1 parameter for comets ('COM' elements type)
+    ! (11) target absolute magnitude H
+    ! (12) target slope parameter G
     REAL(8),DIMENSION(in_norb,12), INTENT(in)             :: in_orbits ! (1:norb,1:12)
     ! in_covariances: input covariance matrices for orbital elements
     REAL(8), DIMENSION(in_norb,6,6), INTENT(in)           :: in_covariances ! (1:norb,1:6,1:6)
