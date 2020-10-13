@@ -1,6 +1,6 @@
 !====================================================================!
 !                                                                    !
-! Copyright 2002-2014,2015                                           !
+! Copyright 2002-2018,2019                                           !
 ! Mikael Granvik, Jenni Virtanen, Karri Muinonen, Teemu Laakso,      !
 ! Dagmara Oszkiewicz                                                 !
 !                                                                    !
@@ -26,13 +26,14 @@
 !! Tools for statistics.
 !!
 !! @author  MG
-!! @version 2015-06-15
+!! @version 2019-10-29
 !!
 MODULE statistics
 
   USE parameters
   USE utilities
   USE sort
+  USE linal
 
   IMPLICIT NONE
 
@@ -53,6 +54,10 @@ MODULE statistics
      MODULE PROCEDURE confidence_limits_hist_r8
      MODULE PROCEDURE confidence_limits_sample_r8
   END INTERFACE confidence_limits
+
+  INTERFACE mahalanobis_distance
+    MODULE PROCEDURE mahalanobis_distance_r8
+  END INTERFACE mahalanobis_distance
 
 CONTAINS
 
@@ -462,7 +467,7 @@ CONTAINS
     IF (PRESENT(bounds)) THEN
        ALLOCATE(indx_arr(ndata), stat=err)
        IF (err /= 0) THEN
-          errstr = " -> statistics : confidence_limits : Caould not allocate memory." // &
+          errstr = " -> statistics : confidence_limits : Could not allocate memory." // &
                TRIM(errstr)
           DEALLOCATE(pdf_, stat=err)
           DEALLOCATE(mask_, stat=err)
@@ -487,7 +492,8 @@ CONTAINS
              probability_mass_ = probability_mass_ + pdf_(indx_arr(i))
              IF (indata(indx_arr(i)) < bounds(1)) THEN
                 bounds(1) = indata(indx_arr(i))
-             ELSE IF (indata(indx_arr(i)) > bounds(2)) THEN
+             END IF
+             IF (indata(indx_arr(i)) > bounds(2)) THEN
                 bounds(2) = indata(indx_arr(i))               
              END IF
              IF (probability_mass_ >= probability_mass) THEN
@@ -615,6 +621,35 @@ CONTAINS
 
   END SUBROUTINE population_covariance
 
+  ! Given the covariance matrix and residuals of a given observation,
+  ! computes the Mahalanobis distance.
+
+  REAL(rprec8) FUNCTION mahalanobis_distance_r8(cov_matrix,residuals, errstr)
+
+    IMPLICIT NONE
+
+    REAL(rprec8), DIMENSION(:,:), INTENT(in)  :: cov_matrix, residuals
+    CHARACTER(len=*), INTENT(inout) :: errstr
+
+    REAL(rprec8), DIMENSION(:,:), ALLOCATABLE :: inverse_cov_matrix
+    REAL(rprec8), DIMENSION(1,1)                :: mahalanobis
+    INTEGER n
+
+    n = size(cov_matrix,dim=1)
+    ALLOCATE(inverse_cov_matrix(n,n))
+
+    inverse_cov_matrix = matinv(cov_matrix,errstr)
+    IF (LEN_TRIM(errstr) /= 0) THEN
+       errstr = " -> statistics : mahalanobis_distance : TRACE BACK." // &
+            TRIM(errstr)
+       RETURN
+    END IF
+
+    mahalanobis = SQRT(MATMUL(MATMUL(TRANSPOSE(residuals),inverse_cov_matrix),(residuals)))
+    mahalanobis_distance_r8 = mahalanobis(1,1)
+    DEALLOCATE(inverse_cov_matrix)
+
+  END FUNCTION mahalanobis_distance_r8
 
 
 

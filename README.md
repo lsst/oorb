@@ -15,7 +15,7 @@ If you have the LSST software stack available, you can simply build oorb as foll
 
 OpenOrb (or OOrb), an open-source orbit-computation package.
 
-[![Build Status](https://dev.azure.com/mjuric/oorb/_apis/build/status/mjuric.oorb?branchName=master)](https://dev.azure.com/mjuric/oorb/_build/latest?definitionId=1?branchName=master)
+[![CI](https://github.com/oorb/oorb/workflows/CI/badge.svg)]()
 [![Test Coverage](https://codecov.io/gh/mjuric/oorb/branch/master/graph/badge.svg)](https://codecov.io/gh/mjuric/oorb)
 
 
@@ -103,6 +103,7 @@ To build OOrb:
   * GNU `make`
   * a Fortran 90/95 compiler (`gfortran` is best tested)
   * `curl` (usually comes with macOS and Linux by default)
+  * The `lapack` library (comes with macOS by default)
 
 To build the python bindings:
 

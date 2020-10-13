@@ -28,7 +28,7 @@
 !! [statistical orbital] ranging method and the least-squares method.
 !!
 !! @author MG, JV, KM, DO 
-!! @version 2019-02-20
+!! @version 2019-10-29
 !!  
 MODULE StochasticOrbit_cl
 
@@ -78,6 +78,7 @@ MODULE StochasticOrbit_cl
   PRIVATE :: getRangeBounds_SO
   PRIVATE :: getResiduals_SO_obss
   PRIVATE :: getResiduals_SO_orb
+  PRIVATE :: getResiduals_SO_orb_arr
   PRIVATE :: getResults_SO
   PRIVATE :: getSampleOrbit_SO
   PRIVATE :: getStandardDeviations_SO
@@ -90,6 +91,8 @@ MODULE StochasticOrbit_cl
   PRIVATE :: setParameters_SO
   PRIVATE :: toCartesian_SO
   PRIVATE :: toKeplerian_SO
+  PRIVATE :: writeResiduals_SO_arr_sparse
+  PRIVATE :: writeResiduals_SO_orb
 
   TYPE StochasticOrbit
      PRIVATE
@@ -243,6 +246,8 @@ MODULE StochasticOrbit_cl
      INTEGER                             :: os_ntrial_prm = 5000
      INTEGER                             :: os_sampling_type_prm = 1
 
+    ! Variables for MCMC mass estimation
+     REAL(bp), DIMENSION(:,:), POINTER   :: mean_residuals    => NULL()
   END TYPE StochasticOrbit
 
 
@@ -272,6 +277,7 @@ MODULE StochasticOrbit_cl
   INTERFACE getChi2
      MODULE PROCEDURE getChi2_matrix
      MODULE PROCEDURE getChi2_this_orb
+     MODULE PROCEDURE getChi2_this_orb_arr
   END INTERFACE getChi2
 
   INTERFACE getCovarianceMatrix
@@ -322,6 +328,7 @@ MODULE StochasticOrbit_cl
   INTERFACE getResiduals
      MODULE PROCEDURE getResiduals_SO_obss
      MODULE PROCEDURE getResiduals_SO_orb
+     MODULE PROCEDURE getResiduals_SO_orb_arr
   END INTERFACE getResiduals
 
   INTERFACE getResults
@@ -351,6 +358,15 @@ MODULE StochasticOrbit_cl
   INTERFACE getTime
      MODULE PROCEDURE getTime_SO
   END INTERFACE getTime
+
+  INTERFACE outlierDetection
+     MODULE PROCEDURE outlierDetection_SO_arr
+  END INTERFACE outlierDetection
+
+  INTERFACE writeResiduals_SO
+     MODULE PROCEDURE writeResiduals_SO_arr_sparse
+     MODULE PROCEDURE writeResiduals_SO_orb
+  END INTERFACE writeResiduals_SO
 
   INTERFACE propagate
      MODULE PROCEDURE propagate_SO
@@ -1647,12 +1663,19 @@ CONTAINS
     mask_measur = this%obs_masks_prm
     ! Outlier rejection
     IF (this%outlier_rejection_prm) THEN
+       j = 0
        DO i=1,nobs
           IF (ANY(ABS(residuals2(i,2:3)) > &
                this%outlier_multiplier_prm*stdev_arr_measur(i,2:3))) THEN
              mask_measur(i,:) = .FALSE.
+             j = j + 1
           END IF
        END DO
+       IF (info_verb >= 2) THEN
+          WRITE(stdout,"(2X,A,1X,A,1X,I0)") &
+               "StochasticOrbit / covarianceSampling:", &
+               "Number of outliers based on nominal orbit:", j
+       END IF       
     END IF
 
     ! Reference chi2 from the input orbit which is assumed to be the
@@ -1670,6 +1693,7 @@ CONTAINS
             "StochasticOrbit / covarianceSampling:", &
             "Negative chi2 (", chi2, ") for ML solution."
     END IF
+
     ! Jeffrey's apriori:
     IF (this%regularization_prm) THEN
        ! Sigma_elements^(-1) = A^T Sigma_obs^(-1) A, where A is the
@@ -1774,7 +1798,8 @@ CONTAINS
        END IF
        WRITE(stdout,"(2X,A,1X,A)") &
             "StochasticOrbit / covarianceSampling:", &
-            "Starting sampling."
+            "Starting sampling..."
+       WRITE(stdout,*)
     END IF
 
     DO WHILE (iorb < this%cos_norb_prm .AND. itrial < this%cos_ntrial_prm)
@@ -2144,8 +2169,8 @@ CONTAINS
        iorb = iorb + 1
        orb_arr(iorb) = copy(orb)
        reg_apriori_arr(iorb) = apriori
-       pdf_arr(iorb) = apriori*EXP(-0.5_bp*(chi2 - COUNT(mask_measur)))
-       rchi2_arr(iorb) = chi2 - SUM(n0(1:6))
+       pdf_arr(iorb) = apriori*EXP(-0.5_bp*(chi2/COUNT(mask_measur)))
+       rchi2_arr(iorb) = chi2/(SUM(n0(1:6)) - 6)
        IF (this%jacobians_prm) THEN
           ! Determinant of Jacobian between topocentric spherical
           ! coordinates of the first and the last observation and
@@ -2202,7 +2227,7 @@ CONTAINS
           jacobian_arr(iorb,3) = 0.5_bp*elements(2) * &
                SIN(0.5_bp*elements(3)) / COS(0.5_bp*elements(3))**3
           IF (info_verb >= 3) THEN
-             WRITE(stdout,"(2X,A,1X,A,F15.12)") &
+             WRITE(stdout,"(2X,A,1X,A,F25.15)") &
                   "StochasticOrbit / covarianceSampling:", &
                   "Chi2 new: ", chi2
              WRITE(stdout,"(2X,A,1X,A,3(1X,F10.5))") &
@@ -2235,13 +2260,15 @@ CONTAINS
           WRITE(stdout,"(2X,A,1X,A,I0,1X,A)") &
                "StochasticOrbit / covarianceSampling:", &
                "Orbit #", iorb, "accepted."
-          WRITE(stdout,"(2X,A,1X,A)") &
-               "StochasticOrbit / covarianceSampling:", &
-               "Sample information matrix:"
-          CALL matrix_print(information_matrix_elem,stdout,errstr)
+          IF (this%regularization_prm) THEN
+             WRITE(stdout,"(2X,A,1X,A)") &
+                  "StochasticOrbit / covarianceSampling:", &
+                  "Sample information matrix:"
+             CALL matrix_print(information_matrix_elem,stdout,errstr)
+          END IF
           WRITE(stdout,"(2X,A,1X,A,1X,2"//TRIM(efrmt)//")") &
                "StochasticOrbit / covarianceSampling:", &
-               "Sample chi2, rchi2:", chi2, chi2-SUM(n0(1:6))
+               "Sample chi2, rchi2:", chi2, chi2/(SUM(n0(1:6)) - 6)
           WRITE(stdout,"(2X,A,1X,A,1X,1"//TRIM(efrmt)//")") &
                "StochasticOrbit / covarianceSampling:", &
                "Sample apriori:", apriori
@@ -2254,6 +2281,7 @@ CONTAINS
           WRITE(stdout,"(2X,A,1X,A,L1)") &
                "StochasticOrbit / covarianceSampling:", &
                "dchi2 filtering: ", this%dchi2_rejection_prm 
+          WRITE(stdout,*)
        END IF
 
     END DO
@@ -2784,9 +2812,38 @@ CONTAINS
 
   END FUNCTION getChi2_this_orb
 
+  ! Integrates several objects simultaneously while taking asteroid-asteroid
+  ! perturbations into account.
+  FUNCTION getChi2_this_orb_arr(this_arr, orb_arr,residuals, obs_masks) result(chi2_arr)
 
+    IMPLICIT NONE
+    TYPE (StochasticOrbit), INTENT(inout), DIMENSION(:) :: this_arr
+    TYPE (Orbit), INTENT(in), DIMENSION(:) :: orb_arr
+    LOGICAL, DIMENSION(:,:), INTENT(in), OPTIONAL :: obs_masks
+    REAL(bp) :: chi2_arr(size(this_arr))
+    REAL(bp), DIMENSION(:,:,:), POINTER :: information_matrix => NULL()
+    TYPE (SparseArray), INTENT(inout):: residuals
+    INTEGER :: err, i,j, old_simint
+    REAL(bp), DIMENSION(:,:), POINTER :: additional_perturbers
 
+    old_simint = simint
+    simint = SIZE(this_arr)
+    residuals = getResiduals(this_arr, orb_arr)
 
+    DO i=1, SIZE(chi2_arr)
+       information_matrix => getBlockDiagInformationMatrix(this_arr(i)%obss)
+       IF (PRESENT(obs_masks)) THEN
+          chi2_arr(i) = chi_square(residuals%vectors(i)%elements, &
+               information_matrix, obs_masks, errstr)
+       ELSE
+          chi2_arr(i) = chi_square(residuals%vectors(i)%elements, &
+               information_matrix, this_arr(i)%obs_masks_prm, errstr)
+       END IF
+       DEALLOCATE(information_matrix)
+    END DO
+    simint = old_simint
+
+  END FUNCTION getChi2_this_orb_arr
 
   !! *Description*:
   !!
@@ -3762,6 +3819,13 @@ CONTAINS
 
     IMPLICIT NONE
     TYPE (StochasticOrbit), INTENT(in) :: this
+
+    IF (TRIM(this%id_prm) == "") THEN
+       error = .TRUE.
+       CALL errorMessage("StochasticOrbit / getID", &
+         "Object does not contain an ID.", 1)
+       RETURN
+    END IF
 
     getID_SO = this%id_prm
 
@@ -5386,6 +5450,78 @@ CONTAINS
 
   END FUNCTION getResiduals_SO_orb
 
+  FUNCTION getResiduals_SO_orb_arr(this_arr, orb_arr) result(residuals)
+
+    IMPLICIT NONE
+    TYPE (StochasticOrbit), INTENT(in), DIMENSION(:)       :: this_arr
+    TYPE (Orbit), INTENT(in), DIMENSION(:)                 :: orb_arr
+    TYPE (SparseArray)                                     :: residuals
+    TYPE (CartesianCoordinates), DIMENSION(:), ALLOCATABLE :: obsy_ccoords
+    TYPE (CartesianCoordinates), DIMENSION(:), POINTER     :: temp_ccoords => NULL()
+    TYPE (SphericalCoordinates), DIMENSION(:,:), POINTER   :: computed_scoords, sorted_scoords => NULL()
+    TYPE (SphericalCoordinates), DIMENSION(:), POINTER     :: observed_scoords => NULL()
+    REAL(bp), DIMENSION(:,:), ALLOCATABLE                  :: observed_coords, computed_coords
+    REAL(bp), DIMENSION(:), ALLOCATABLE                    :: mjd_tt_arr, mjd_tt_arr_sorted, mjd_tt_arr_new
+    INTEGER                                                :: err, i,j,k, nstorb
+    INTEGER, DIMENSION(:), ALLOCATABLE                     :: nobs_arr,indx_arr
+
+    TYPE (Time)                                            :: t
+
+    nstorb = SIZE(this_arr)
+    ALLOCATE(nobs_arr(nstorb))
+    ! Initialize amount of objects in sparse array.
+    ALLOCATE(residuals%vectors(nstorb))
+
+    DO i=1,nstorb
+       nobs_arr(i) = getNrOfObservations(this_arr(i)%obss)
+       ! Initialize amount of observations for each object in sparse array + amount of residuals.
+       ALLOCATE(residuals%vectors(i)%elements(nobs_arr(i),6))
+    END DO
+    ALLOCATE(obsy_ccoords(SUM(nobs_arr(:))))
+
+    temp_ccoords => getObservatoryCCoords(this_arr(1)%obss)
+    obsy_ccoords(1:nobs_arr(1)) = temp_ccoords(:)
+    DEALLOCATE(temp_ccoords)
+    NULLIFY(temp_ccoords)
+
+    DO i=2,nstorb
+       temp_ccoords => getObservatoryCCoords(this_arr(i)%obss)
+       obsy_ccoords(1+SUM(nobs_arr(1:i-1)):SUM(nobs_arr(1:i-1))&
+            + nobs_arr(i)) = temp_ccoords(:)
+       DEALLOCATE(temp_ccoords)
+       NULLIFY(temp_ccoords)
+    END DO
+
+    CALL getEphemerides(orb_arr, obsy_ccoords, computed_scoords)
+
+    ! Here we compute the residuals for each object and appropriately store them in the result variable.
+    DO i=1,nstorb
+       ALLOCATE(observed_coords(nobs_arr(i),6), &
+            computed_coords(nobs_arr(i),6), stat=err)
+       observed_coords = 0.0_bp
+       computed_coords = 0.0_bp
+       observed_scoords => getObservationSCoords(this_arr(i)%obss)
+       DO j=1,nobs_arr(i)
+          observed_coords(j,:) = getCoordinates(observed_scoords(j))
+          computed_coords(j,:) = getCoordinates(computed_scoords(i,j+SUM(nobs_arr(1:i-1))))
+       END DO
+       residuals%vectors(i)%elements(:,1:6) = &
+            observed_coords(:,1:6) - computed_coords(:,1:6)
+       residuals%vectors(i)%elements(1:nobs_arr(i),2) = &
+            residuals%vectors(i)%elements(1:nobs_arr(i),2) * &
+            COS(observed_coords(1:nobs_arr(i),3))
+       DO j=1,nobs_arr(i)
+          IF (ABS(residuals%vectors(i)%elements(j,2)) > pi) THEN
+             residuals%vectors(i)%elements(j,2) = two_pi - &
+                  residuals%vectors(i)%elements(j,2)
+          END IF
+       END DO
+       DEALLOCATE(observed_scoords,observed_coords,computed_coords)
+
+    END DO
+
+    DEALLOCATE(obsy_ccoords, computed_scoords,nobs_arr)
+  END FUNCTION getResiduals_SO_orb_arr
 
 
 
@@ -11257,7 +11393,7 @@ CONTAINS
          storb_integrator, &
          orb_integrator
     CHARACTER(len=64) :: &
-         frmt = "(F20.15,1X)", &
+         frmt = "(F25.15,1X)", &
          efrmt = "(E10.4,1X)"
     CHARACTER(len=64) :: &
          str
@@ -11585,7 +11721,7 @@ CONTAINS
        ! Probability density function value:
        pdf = EXP(-0.5_bp*(rchi2))
        IF (info_verb >= 3) THEN
-          WRITE(stdout,"(2X,A,1X,2"//TRIM(frmt)//")") "Sample chi2:", rchi2
+          WRITE(stdout,"(2X,A,1X,2"//TRIM(frmt)//")") "Sample reduced chi2:", rchi2
           WRITE(stdout,"(2X,A,1X,1"//TRIM(efrmt)//")") "Sample pdf:", pdf
           WRITE(stdout,*)
        END IF
@@ -11641,11 +11777,13 @@ CONTAINS
              elements(3:5) = elements(3:5)/rad_deg
           END IF
           IF (accept) THEN
-             WRITE(stdout,"(A,1X,9(F15.8,1X),A,1X,I0)") "CAR", &
+             WRITE(stdout,"(A,1X,9(F15.8,1X),A,1X,I0)") &
+                  TRIM(this%element_type_prm), &
                   elements, pdf, rchi2, a_r, &
                   "ACCEPTED", this%vomcmc_norb_cmp + 1
           ELSE
-             WRITE(stdout,"(A,1X,9(F15.8,1X),A,1X,I0)") "CAR", &
+             WRITE(stdout,"(A,1X,9(F15.8,1X),A,1X,I0)") &
+                  TRIM(this%element_type_prm), &
                   elements, pdf, rchi2, a_r, "REJECTED", &
                   this%vomcmc_ntrial_cmp - this%vomcmc_norb_cmp
           END IF
@@ -19743,7 +19881,222 @@ CONTAINS
 
   END SUBROUTINE updateRanging
 
+  ! Prints out residuals for all objects.
+  SUBROUTINE writeResiduals_SO_arr_sparse(this, resids, output)
+    IMPLICIT NONE
+
+    TYPE(StochasticOrbit), DIMENSION(:), INTENT(inout) :: this
+    TYPE(SparseArray), INTENT(IN) :: resids
+    INTEGER, INTENT(IN)           :: output
+
+    LOGICAL, DIMENSION(:,:), POINTER :: obs_masks
+    INTEGER :: i, j, k
+    INTEGER, DIMENSION(:), ALLOCATABLE :: nobs_arr
+
+    ALLOCATE(nobs_arr(SIZE(this)))
+
+    DO i=1, SIZE(this)
+       obs_masks => getObservationMasks(this(i))
+       nobs_arr(i) = SIZE(obs_masks,dim=1)*2
+       DO j=1, nobs_arr(i)/2
+          IF (i == 2) THEN
+             k = j + nobs_arr(1)/2
+          ELSE
+             k = j
+          END IF
+          IF (obs_masks(j,2) .EQV. .FALSE.) THEN
+             WRITE(output, "(1(I7,1X),2(F10.6,1X),1(I1))") k, resids%vectors(i)%elements(j,2:3)/rad_asec, 0
+          ELSE
+             WRITE(output, "(1(I7,1X),2(F10.6,1X),1(I1))") k, resids%vectors(i)%elements(j,2:3)/rad_asec, 1
+          END IF
+          IF (j == nobs_arr(i)/2) THEN
+             IF (i == SIZE(this)) THEN
+               WRITE(output, *) "END" ! Means we're done printing residuals
+             ELSE
+               WRITE(output, *) "* * * *" !Signifies us moving to another object
+             END IF
+          END IF
+       END DO
+       DEALLOCATE(obs_masks)
+    END DO
+    DEALLOCATE(nobs_arr)
+
+  END SUBROUTINE writeResiduals_SO_arr_sparse
+
+  SUBROUTINE writeResiduals_SO_orb(this, orb_arr, output)
+    IMPLICIT NONE
+
+    TYPE(StochasticOrbit), DIMENSION(:), INTENT(inout) :: this
+    TYPE(Orbit), DIMENSION(:), INTENT(IN) :: orb_arr
+    INTEGER, INTENT(IN)                   :: output
+    TYPE(SparseArray) :: residuals
+    LOGICAL, DIMENSION(:,:), POINTER :: obs_masks
+    INTEGER :: i, j, k
+    INTEGER, DIMENSION(:), ALLOCATABLE :: nobs_arr
+
+    ALLOCATE(nobs_arr(SIZE(this)))
+    residuals = getResiduals(this, orb_arr)
+
+    DO i=1, SIZE(this)
+       obs_masks => getObservationMasks(this(i))
+       nobs_arr(i) = SIZE(obs_masks,dim=1)*2
+       DO j=1, nobs_arr(i)/2
+          IF (i > 1) THEN
+             k = j + nobs_arr(i-1)/2
+          ELSE
+             k = j
+          END IF
+          IF (obs_masks(j,2) .EQV. .FALSE.) THEN
+             WRITE(output, "(1(I7,1X),2(F10.6,1X),1(I1))") k, residuals%vectors(i)%elements(j,2:3) / rad_asec, 0
+          ELSE
+             WRITE(output, "(1(I7,1X),2(F10.6,1X),1(I1))") k, residuals%vectors(i)%elements(j,2:3) / rad_asec, 1
+          END IF
+          IF (j == nobs_arr(i)/2) THEN
+             IF (i == SIZE(this)) THEN
+                WRITE(output, *) "END" !This signifies us moving to another object
+             ELSE
+                WRITE(output, *) "* * * *" !This signifies us moving to another object
+             END IF
+
+          END IF
+       END DO
+       DEALLOCATE(residuals%vectors(i)%elements)
+       DEALLOCATE(obs_masks)
+    END DO
+    DEALLOCATE(residuals%vectors)
+    DEALLOCATE(nobs_arr)
+  END SUBROUTINE writeResiduals_SO_orb
 
 
+  ! Prints out the mean MCMC residuals for all objects.
+  SUBROUTINE writeMeanResids(this, orb_arr, output)
+    IMPLICIT NONE
+
+    TYPE(StochasticOrbit), DIMENSION(:), INTENT(inout) :: this
+    TYPE(Orbit), DIMENSION(:), INTENT(IN) :: orb_arr
+    INTEGER, INTENT(IN)                   :: output
+
+    LOGICAL, DIMENSION(:,:), POINTER :: obs_masks
+    INTEGER :: i, j, k
+    INTEGER, DIMENSION(:), ALLOCATABLE :: nobs_arr
+
+    ALLOCATE(nobs_arr(SIZE(this)))
+
+    DO i=1, SIZE(this)
+       obs_masks => getObservationMasks(this(i))
+       nobs_arr(i) = SIZE(obs_masks,dim=1)*2
+       DO j=1, nobs_arr(i)/2
+          IF (i == 2) THEN
+             k = j + nobs_arr(1)/2
+          ELSE
+             k = j
+          END IF
+          IF (obs_masks(j,2) .EQV. .FALSE.) THEN
+             WRITE(output, "(1(I7,1X),2(F10.6,1X),1(I1))") k, this(i)%mean_residuals(j,2:3)/rad_asec, 0
+          ELSE
+             WRITE(output, "(1(I7,1X),2(F10.6,1X),1(I1))") k, this(i)%mean_residuals(j,2:3)/rad_asec, 1
+          END IF
+          IF (j == nobs_arr(i)/2) THEN
+             IF (i == SIZE(this)) THEN
+               WRITE(output, *) "END" ! Means we're done printing residuals
+             ELSE
+               WRITE(output, *) "* * * *" !Signifies us moving to another object
+             END IF
+          END IF
+       END DO
+       DEALLOCATE(obs_masks)
+    END DO
+    DEALLOCATE(nobs_arr)
+
+  END SUBROUTINE writeMeanResids
+
+  ! Retrieves the current mean MCMC residuals for a given object.
+  SUBROUTINE getMeanResids(this,residuals)
+    IMPLICIT NONE
+
+    TYPE(StochasticOrbit), INTENT(in) :: this
+    REAL(bp), DIMENSION(:,:), INTENT(inout) :: residuals
+
+    residuals = this%mean_residuals
+
+  END SUBROUTINE getMeanResids
+
+  ! Used to update the mean residuals for MCMC objects after
+  ! each accepted proposal.
+  SUBROUTINE updateMeanResids(this_arr,residuals)
+    IMPLICIT NONE
+
+    TYPE(StochasticOrbit), DIMENSION(:), INTENT(inout) :: this_arr
+    TYPE(SparseArray), INTENT(inout) :: residuals
+    INTEGER i,j
+    nrun = nrun +1
+    DO i=1, SIZE(this_arr)
+       IF (.NOT. ASSOCIATED(this_arr(i)%mean_residuals)) THEN
+          ALLOCATE(this_arr(i)%mean_residuals(getNrOfObservations(this_arr(i)%obss),6))
+          this_arr(i)%mean_residuals(:,:) = (residuals%vectors(i)%elements(:,:))
+       ELSE IF (nrun == 2) THEN
+          this_arr(i)%mean_residuals(:,:) = (residuals%vectors(i)%elements(:,:))
+       ELSE
+          this_arr(i)%mean_residuals(:,:) = (nrun-1.0_bp)/nrun*this_arr(i)%mean_residuals(:,:) + &
+               1.0_bp/nrun * (residuals%vectors(i)%elements(:,:))
+          !
+       END IF
+       !WRITE(stderr, *) "Average residuals for", i, ": ", (SUM(ABS(this_arr(i)%mean_residuals(:,2))) &
+       !     /SIZE(this_arr(i)%mean_residuals(:,2)))/rad_asec, (SUM(ABS(this_arr(i)%mean_residuals(:,3))) &
+       !     /SIZE(this_arr(i)%mean_residuals(:,3)))/rad_asec
+    END DO
+
+  END SUBROUTINE updateMeanResids
+
+  ! Detects and masks outliers for storb objects
+  ! based on it's mean residuals.
+  SUBROUTINE outlierDetection_SO_arr(this)
+
+    IMPLICIT NONE
+
+    TYPE(StochasticOrbit), DIMENSION(:), INTENT(inout) :: this
+    LOGICAL, DIMENSION(:,:), POINTER :: obs_masks
+    REAL(bp), DIMENSION(:,:), POINTER :: stdev
+    REAL(bp), DIMENSION(:, :, :), POINTER :: cov_matrix_full
+    REAL(bp),DIMENSION(2,2) :: cov_matrix, inverse
+    REAL(bp), DIMENSION(2,1) :: temp_obs
+    INTEGER :: i, j, k, tot, lol
+    INTEGER, DIMENSION(:), ALLOCATABLE :: nobs_arr
+    REAL(bp), DIMENSION(:,:), ALLOCATABLE :: mean
+    LOGICAL, DIMENSION(6) :: false_masks, true_masks
+    REAL(bp) :: mahalanobis
+
+    CHARACTER     :: err, errstr
+    false_masks = .FALSE.
+    true_masks = .TRUE.
+    ALLOCATE(mean(SIZE(this),2))
+    ALLOCATE(nobs_arr(SIZE(this)))
+    tot = 0
+    DO i=1,SIZE(this)
+       obs_masks => getObservationMasks(this(i))
+       nobs_arr(i) = SIZE(obs_masks,dim=1)*2
+       mean(i,1) = SUM(this(i)%mean_residuals(:,2))/SIZE(this(i)%mean_residuals(:,2))
+       mean(i,2) = SUM(this(i)%mean_residuals(:,3))/SIZE(this(i)%mean_residuals(:,3))
+
+       DO k=1, nobs_arr(i)/2
+          CALL setObservationMask(this(i), k, true_masks)
+       END DO
+
+       stdev => getStandardDeviations(this(i)%obss)
+       cov_matrix_full => getCovarianceMatrices(this(i)%obss)
+       DO j=1, nobs_arr(i)/2
+          cov_matrix(:,:) = cov_matrix_full(j,2:3,2:3)
+          mahalanobis = mahalanobis_distance(cov_matrix,temp_obs,errstr)
+          IF (mahalanobis > this(1)%outlier_multiplier_prm) THEN
+             CALL setObservationMask(this(i), j, false_masks)
+             tot = tot + 1
+          END IF
+       END DO
+       DEALLOCATE(obs_masks)
+       DEALLOCATE(stdev)
+    END DO
+    DEALLOCATE(nobs_arr,mean)
+    DEALLOCATE(cov_matrix_full)
+  END SUBROUTINE outlierDetection_SO_arr
 
 END MODULE StochasticOrbit_cl
