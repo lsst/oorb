@@ -6612,8 +6612,8 @@ CONTAINS
     REAL(bp), DIMENSION(6,6):: information_matrix_elem, &
          jacobian_matrix
     REAL(bp), DIMENSION(6) :: elements, rans, state, state_, &
-         proposal_density
-    REAL(bp), DIMENSION(3) :: pos, rms
+         proposal_density, rms
+    REAL(bp), DIMENSION(3) :: pos
     REAL(bp) :: chi2, ran, t1, t2, obs_coord, jac_sph_inv, &
          jac_sph_inv_, chi2_, chi2min, avalue, a, q, e, dchi2, chi2min_prm
     INTEGER, DIMENSION(:,:), POINTER :: obs_pair_arr => NULL()
@@ -20086,6 +20086,7 @@ CONTAINS
        cov_matrix_full => getCovarianceMatrices(this(i)%obss)
        DO j=1, nobs_arr(i)/2
           cov_matrix(:,:) = cov_matrix_full(j,2:3,2:3)
+          temp_obs(:,1) = this(i)%mean_residuals(j,2:3)
           mahalanobis = mahalanobis_distance(cov_matrix,temp_obs,errstr)
           IF (mahalanobis > this(1)%outlier_multiplier_prm) THEN
              CALL setObservationMask(this(i), j, false_masks)
