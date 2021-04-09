@@ -1671,9 +1671,6 @@ CONTAINS
     CALL NEW(meanres_file, TRIM(out_fname)//trim('.mean.res'))
     CALL OPEN(meanres_file)
 
-    CALL NEW(cov_file, TRIM(out_fname)//trim('.cov'))
-    CALL OPEN(cov_file)
-
     CALL NEW(res_file, TRIM(out_fname)//trim('.res'))
     CALL OPEN(res_file)
 
@@ -1882,8 +1879,8 @@ CONTAINS
                 ! extract information on how many and which observations should
                 ! be used in the analysis
                 obs_masks => getObservationMasks(storb_arr(j))
-                nobs_arr(j) = COUNT(obs_masks) ! We meed to update the total
-                noutlier = noutlier + SIZE(obs_masks,dim=1) - nobs_arr(j)
+                nobs_arr(j) = COUNT(obs_masks(:,2)) ! We meed to update the total
+                noutlier = noutlier + SIZE(obs_masks(:,2)) - nobs_arr(j)
                 DEALLOCATE(obs_masks)          ! amount of used observations after outlier rejection.
                 ALLOCATE(mean_resids(getNrOfObservations(obs_arr(j)),6))
                 CALL getMeanResids(storb_arr(j),mean_resids)
@@ -1940,12 +1937,14 @@ CONTAINS
        IF (accept) THEN
           ! Print out the current proposal matrix every 500 accepted proposals.
           IF (MODULO(iorb,500) == 0) THEN 
-             REWIND(getUnit(cov_file))
+             CALL NEW(cov_file, TRIM(out_fname)//trim('.cov'))
+             CALL OPEN(cov_file)
              WRITE(getUnit(cov_file), *) "# iorb at", iorb, "and itrial at:", itrial, &
                   " and a total of", noutlier, "outliers. Prop. matrix follows:"
              DO i=1,6*nstorb+nperturber
                 WRITE(getUnit(cov_file),*) cov_matrix(i,:)
              END DO
+             CALL NULLIFY(cov_file)
              ok_cov_matrix = cov_matrix
           END IF
           IF ((.NOT. first) .and. (iorb > 1)) THEN ! This is how many repetitions there were. can't be printed until the next
@@ -2152,7 +2151,8 @@ CONTAINS
     END DO
 
     ! ----------------------------- MCMC IS DONE -----------------------
-    !final_solutions = accepted_solutions
+    ! We have to print out the number of accepted proposals for the last one separately.
+    WRITE(getUnit(mcmc_out_file), "(1(I5))", advance="yes") 1
     ! Post-fit computation of statistics for masses
     IF (last) THEN
        ALLOCATE(indx_arr(norb))
@@ -2222,6 +2222,9 @@ CONTAINS
 
     END IF
 
+    CALL NULLIFY(mcmc_out_file)
+    CALL NULLIFY(meanres_file)
+    CALL NULLIFY(res_file)
     DEALLOCATE(additional_perturbers, additional_perturbers_, &
          indx_arr, A_arr, elements_arr, &
          elements0_arr, chi2_arr, rchi2_arr, stat=err)
@@ -2235,48 +2238,44 @@ CONTAINS
   ! https://doi.org/10.1016/j.icarus.2017.06.028
   ! Author: LS
   SUBROUTINE massEstimation_march(storb_arr, orb_arr, HG_arr, dyn_model, integrator, integration_step, &
-       perturbers, asteroid_perturbers, mass, out_fname)
+       perturbers, asteroid_perturbers, mass, out_fname, resolution)
     IMPLICIT NONE
     TYPE (StochasticOrbit), DIMENSION(:), INTENT(inout) :: storb_arr
-    TYPE (Orbit), DIMENSION(:), INTENT(inout) :: orb_arr
-    CHARACTER(len=FNAME_LEN), INTENT(in):: &
-         out_fname
-    TYPE (Orbit), DIMENSION(:,:), POINTER :: &
-         orb_arr2 => NULL()
-    TYPE (Time) :: t, t_prop
-    TYPE (File) :: march_out_file, res_file
-    INTEGER, DIMENSION(:), ALLOCATABLE :: nobs_arr
-    LOGICAL, DIMENSION(:,:), POINTER :: obs_masks
-    REAL(bp), DIMENSION(:,:), POINTER :: stdev_arr_measur, residuals
-    REAL(bp), DIMENSION(:,:), ALLOCATABLE :: chi2_arr
-    REAL(bp), INTENT(in), DIMENSION(:,:) :: HG_arr
-    REAL(bp), DIMENSION(6) :: perturber_elems, rms6, elements
-    REAL(bp), DIMENSION(1,8) :: additional_perturber
-    REAL(bp), DIMENSION(2) :: chi2_arr2
-    REAL(bp), DIMENSION(:), ALLOCATABLE :: marching_masses, chi2_sum_arr
-    REAL(bp) :: density, albedo, const, rough_estimate, lower_mass_bound, &
-         upper_mass_bound, chi_sum, integration_step, mass, avgstdev, &
-         rms1, rms2, best_chi, chi_perturber
-    LOGICAL, DIMENSION(10) :: &
-         perturbers
-    LOGICAL :: print_data, with_simplex, asteroid_perturbers
-    LOGICAL, DIMENSION(6) :: obs_masks2, obs_masks_true
-    INTEGER :: k, i, j,l,m, nobs
-    INTEGER :: outliertot
-    INTEGER, DIMENSION(6) :: n0
-    CHARACTER(len=DYN_MODEL_LEN) :: &
-         dyn_model                                                 !! Dynamical model.
-    CHARACTER(len=INTEGRATOR_LEN) :: &
-         integrator
-    REAL(bp), DIMENSION(:,:), ALLOCATABLE :: residuals_, observed_coords, &
+    TYPE (Orbit), DIMENSION(:), INTENT(inout)           :: orb_arr
+    CHARACTER(len=FNAME_LEN), INTENT(in)                :: out_fname
+    INTEGER, INTENT(INOUT)                              :: resolution
+    REAL(bp), INTENT(in), DIMENSION(:,:)                :: HG_arr
+
+    TYPE (Orbit), DIMENSION(:,:), POINTER               :: orb_arr2 => NULL()
+    TYPE (Time)                                         :: t, t_prop
+    TYPE (File)                                         :: march_out_file, res_file
+    INTEGER, DIMENSION(:), ALLOCATABLE                  :: nobs_arr
+    LOGICAL, DIMENSION(:,:), POINTER                    :: obs_masks
+    REAL(bp), DIMENSION(:,:), POINTER                   :: stdev_arr_measur, residuals
+    REAL(bp), DIMENSION(:,:), ALLOCATABLE               :: chi2_arr
+    REAL(bp), DIMENSION(6)                              :: perturber_elems, rms6, elements
+    REAL(bp), DIMENSION(1,8)                            :: additional_perturber
+    REAL(bp), DIMENSION(2)                              :: chi2_arr2
+    REAL(bp), DIMENSION(:), ALLOCATABLE                 :: marching_masses, chi2_sum_arr
+    REAL(bp)                                            :: density, albedo, const, &
+         rough_estimate, lower_mass_bound, upper_mass_bound, chi_sum, integration_step, &
+         mass, avgstdev, rms1, rms2, best_chi, chi_perturber, step
+    LOGICAL, DIMENSION(10)                              :: perturbers
+    LOGICAL                                             :: print_data, asteroid_perturbers
+    LOGICAL, DIMENSION(6)                               :: obs_masks2, obs_masks_true
+    INTEGER                                             :: k, i, j, l, m, nobs, outliertot
+    INTEGER, DIMENSION(6)                               :: n0
+    CHARACTER(len=DYN_MODEL_LEN)                        :: dyn_model
+    CHARACTER(len=INTEGRATOR_LEN)                       :: integrator
+    REAL(bp), DIMENSION(:,:), ALLOCATABLE               :: residuals_, observed_coords, &
          computed_coords, elements_arr, stdev, mean
-    TYPE (CartesianCoordinates), DIMENSION(:), POINTER :: &
+    TYPE (CartesianCoordinates), DIMENSION(:), POINTER  :: &
          obsy_ccoords => NULL()
-    TYPE (SphericalCoordinates), DIMENSION(:), POINTER :: &
+    TYPE (SphericalCoordinates), DIMENSION(:), POINTER  :: &
          observed_scoords => NULL(), &
          computed_scoords => NULL()
-    TYPE (Observations) :: obss
-    TYPE (SparseArray) :: resids
+    TYPE (Observations)                                 :: obss
+    TYPE (SparseArray)                                  :: resids
 
     CALL NEW(march_out_file, TRIM(out_fname))
     CALL OPEN(march_out_file)
@@ -2292,39 +2291,35 @@ CONTAINS
             perturbers=perturbers, asteroid_perturbers=asteroid_perturbers, integrator=integrator, &
             integration_step=integration_step)
     END DO
+    IF (resolution == 0) THEN
+      resolution = 300 ! Default value if resolution is not given.
+    END IF
+
     perturber_elems(:) = getElements(orb_arr(1), "cartesian", "equatorial")
 
     ! Rough mass estimate to sample in approximately right range:
     density = 2.5_bp ! g/cm3
-    density = density * 1.0e12_bp / kg_solar ! solar masses / km3
     albedo = 0.15_bp
-    const = 391222381.5_bp * pi * density / (albedo*SQRT(albedo))
+    const = 391222381.5_bp * pi * density * (1.0e12_bp / kg_solar) / (albedo*SQRT(albedo))
     rough_estimate = const*10**(-0.6_bp*HG_arr(1,1))
     WRITE(getUnit(march_out_file), *) "# Rough mass estimate for march:", rough_estimate
-    lower_mass_bound = 0.2_bp * rough_estimate
+    lower_mass_bound = 0.1_bp * rough_estimate
     upper_mass_bound = 10.0_bp * rough_estimate
 
-    j = 50000
-    ALLOCATE(marching_masses(j))
+    ALLOCATE(marching_masses(resolution))
+    ALLOCATE(chi2_arr(resolution,size(orb_arr)))
+    ALLOCATE(chi2_sum_arr(resolution))
+
+    ! Generates an array of evenly spaced masses.
+    step = 1.0_bp/resolution * upper_mass_bound
     marching_masses(1) = lower_mass_bound
-    j = 50000
 
-    DO i=2, j
-       marching_masses(i) = marching_masses(i-1) + rough_estimate*0.02_bp
-
-       IF (marching_masses(i) > upper_mass_bound) THEN
-          k = i
-          WRITE(stderr, *) "Testing with ", k, " masses."
-          EXIT
-       END IF
-       !       ELSE IF (i == j) THEN
-       !          WRITE(stderr, * ) "Too many masses!!!!"
-       !          STOP
-       !       END IF
+    DO i=1,resolution
+      mass = lower_mass_bound + (i-1) * step
+      marching_masses(i) = mass
     END DO
-    ALLOCATE(chi2_arr(k,size(orb_arr)))
-    ALLOCATE(chi2_sum_arr(k))
-    DO i=1, k
+
+    DO i=1, resolution
        CALL setParameters(orb_arr(1), mass=marching_masses(i))
        chi2_arr(i,:) = getChi2(storb_arr, orb_arr, resids)
        chi2_sum_arr(i) = SUM(chi2_arr(i,:))
