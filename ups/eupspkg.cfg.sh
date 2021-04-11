@@ -7,15 +7,12 @@ _ensure_exists()
 
 prep()
 {
-	# check for system prerequisites
-	_ensure_exists gfortran
-
 	default_prep
 }
 
 config()
 {
-	./configure gfortran opt --with-pyoorb
+	./configure conda opt --with-pyoorb
 }
 
 build()
